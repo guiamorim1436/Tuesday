@@ -30,8 +30,8 @@ export const Dashboard: React.FC = () => {
         setTasks(fetchedTasks);
         setPartners(fetchedPartners);
         setSlaTiers(fetchedSlas);
-      } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
+      } catch (error: any) {
+        console.error("Failed to fetch dashboard data:", error?.message || error);
       } finally {
         setIsLoading(false);
       }
