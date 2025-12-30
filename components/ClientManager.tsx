@@ -87,7 +87,7 @@ export const ClientManager: React.FC = () => {
 
   const handleBulkDelete = async () => {
       if (!confirm(`Excluir ${selectedIds.size} itens?`)) return;
-      const ids = Array.from(selectedIds);
+      const ids = Array.from(selectedIds) as string[];
       if (activeTab === 'clients') {
           await api.deleteClientsBulk(ids);
           setClients(clients.filter(c => !selectedIds.has(c.id)));

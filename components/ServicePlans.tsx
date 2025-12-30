@@ -38,7 +38,10 @@ export const ServicePlans: React.FC = () => {
         setSlaTiers([...slaTiers, created]);
         setNewSLA({ name: '', price: 0, includedHours: 0, description: '', features: [] });
         setFeatureInput('');
-    } catch(e) { console.error(e); }
+    } catch(e: any) { 
+        console.error(e);
+        alert('Erro ao salvar plano. Verifique se você executou o SQL atualizado em Configurações > Banco de Dados.');
+    }
   };
 
   const handleDeleteSLA = async (id: string) => {

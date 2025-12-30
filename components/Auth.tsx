@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Mail, Lock, User, Loader2, ArrowRight, ShieldAlert } from 'lucide-react';
+import { Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react';
 import { api } from '../services/api';
 
 interface AuthProps {
@@ -39,19 +39,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const handleBypass = async () => {
-        setIsLoading(true);
-        setTimeout(async () => {
-            try {
-                const user = await api.login('admin@admin.com', 'admin'); 
-                if (user) onLogin(user);
-            } catch (e) {
-                setError("Falha no bypass.");
-                setIsLoading(false);
-            }
-        }, 800);
     };
 
     return (
@@ -212,17 +199,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                             >
                                 {isLogin ? 'Criar uma nova conta' : 'Já possui uma conta? Entrar'} <ArrowRight size={14} className="ml-1"/>
                             </button>
-
-                            {/* Bypass Button for Testing */}
-                            {isLogin && (
-                                <button 
-                                    onClick={handleBypass}
-                                    type="button"
-                                    className="text-xs font-mono text-emerald-600 hover:underline flex items-center opacity-70 hover:opacity-100 transition-opacity mt-4 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100 shadow-sm"
-                                >
-                                    <ShieldAlert size={12} className="mr-1.5"/> Modo Admin (Bypass)
-                                </button>
-                            )}
                         </div>
                     </div>
                     

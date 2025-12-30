@@ -1,18 +1,19 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Terminal, AlertTriangle, Building, Save, SquarePen, Loader2, Clock, CalendarDays, BarChart2, Coffee } from 'lucide-react';
+import { User, Terminal, AlertTriangle, Building, Save, SquarePen, Loader2, Clock, CalendarDays, BarChart2, Coffee, Database, BellRing } from 'lucide-react';
 import { CompanySettings, CustomFieldDefinition, WorkConfig } from '../types';
 import { DEFAULT_CUSTOM_FIELDS } from '../constants';
 import { api } from '../services/api';
 import { supabase, isConfigured } from '../lib/supabaseClient';
 
-const SQL_SCHEMA = `-- ATUALIZAÇÃO COMPLETA DO BANCO DE DADOS (TUESDAY ERP)
--- Copie e cole este script no SQL Editor do Supabase para criar toda a estrutura.
+const SQL_SCHEMA = `-- SCRIPT DE ATUALIZAÇÃO COMPLETO DO BANCO DE DADOS (TUESDAY ERP)
+-- Execute este script no SQL Editor do Supabase para corrigir todas as tabelas.
 
--- 1. Habilitar extensões necessárias
+-- 1. Extensões
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 2. Tabelas de Configuração e Auxiliares
+-- 2. Criação de Tabelas Core
+
 CREATE TABLE IF NOT EXISTS public.app_settings (
     key TEXT PRIMARY KEY,
     value JSONB
@@ -24,7 +25,85 @@ CREATE TABLE IF NOT EXISTS public.sla_tiers (
   price NUMERIC DEFAULT 0,
   included_hours NUMERIC DEFAULT 0,
   description TEXT,
-  features JSONB DEFAULT '[]'::jsonb, -- Array de strings (funcionalidades)
+  features JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.partners (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  total_referrals INTEGER DEFAULT 0,
+  total_commission_paid NUMERIC DEFAULT 0,
+  implementation_fee NUMERIC DEFAULT 0,
+  implementation_days INTEGER DEFAULT 0,
+  cost_per_seat NUMERIC DEFAULT 0,
+  billing_day INTEGER,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.clients (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT DEFAULT 'Ativo',
+  sla_tier_id UUID REFERENCES public.sla_tiers(id) ON DELETE SET NULL,
+  partner_id UUID REFERENCES public.partners(id) ON DELETE SET NULL,
+  onboarding_date DATE,
+  health_score INTEGER DEFAULT 100,
+  hours_used_month NUMERIC DEFAULT 0,
+  billing_day INTEGER,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.transactions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  date DATE NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT,
+  amount NUMERIC DEFAULT 0,
+  type TEXT CHECK (type IN ('income', 'expense')),
+  status TEXT CHECK (status IN ('paid', 'pending')),
+  frequency TEXT DEFAULT 'single',
+  installments INTEGER,
+  client_id UUID REFERENCES public.clients(id) ON DELETE SET NULL,
+  partner_id UUID REFERENCES public.partners(id) ON DELETE SET NULL,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.tasks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  client_id UUID REFERENCES public.clients(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'Backlog',
+  priority TEXT DEFAULT 'Média',
+  category TEXT,
+  start_date DATE,
+  due_date DATE,
+  estimated_hours NUMERIC DEFAULT 0,
+  actual_hours NUMERIC DEFAULT 0,
+  is_tracking_time BOOLEAN DEFAULT false,
+  last_time_log_start BIGINT,
+  assignee TEXT,
+  participants TEXT[],
+  watchers TEXT[],
+  custom_fields JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Outras Tabelas de Apoio
+CREATE TABLE IF NOT EXISTS public.app_users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  password TEXT, 
+  role TEXT DEFAULT 'client',
+  approved BOOLEAN DEFAULT false,
+  avatar TEXT,
+  linked_entity_id UUID, 
+  permissions JSONB DEFAULT '{}'::jsonb, 
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -51,76 +130,11 @@ CREATE TABLE IF NOT EXISTS public.custom_field_definitions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 3. Templates de Tarefas (Workflow)
 CREATE TABLE IF NOT EXISTS public.task_template_groups (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
   templates JSONB DEFAULT '[]'::jsonb, 
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 4. Entidades Principais (Parceiros e Clientes)
-CREATE TABLE IF NOT EXISTS public.partners (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  total_referrals INTEGER DEFAULT 0,
-  total_commission_paid NUMERIC DEFAULT 0,
-  implementation_fee NUMERIC DEFAULT 0,
-  implementation_days INTEGER DEFAULT 0,
-  cost_per_seat NUMERIC DEFAULT 0, -- Custo mensal por cliente ativo
-  billing_day INTEGER,
-  custom_fields JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS public.clients (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  status TEXT DEFAULT 'Ativo',
-  sla_tier_id UUID REFERENCES public.sla_tiers(id) ON DELETE SET NULL,
-  partner_id UUID REFERENCES public.partners(id) ON DELETE SET NULL,
-  onboarding_date DATE,
-  health_score INTEGER DEFAULT 100,
-  hours_used_month NUMERIC DEFAULT 0,
-  billing_day INTEGER,
-  custom_fields JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 5. Usuários e Permissões
-CREATE TABLE IF NOT EXISTS public.app_users (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  password TEXT, 
-  role TEXT DEFAULT 'client',
-  approved BOOLEAN DEFAULT false,
-  avatar TEXT,
-  linked_entity_id UUID, 
-  permissions JSONB DEFAULT '{}'::jsonb, 
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 6. Operação (Tarefas e Comentários)
-CREATE TABLE IF NOT EXISTS public.tasks (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT NOT NULL,
-  description TEXT,
-  client_id UUID REFERENCES public.clients(id) ON DELETE CASCADE,
-  status TEXT DEFAULT 'Backlog',
-  priority TEXT DEFAULT 'Média',
-  category TEXT,
-  start_date DATE,
-  due_date DATE,
-  estimated_hours NUMERIC DEFAULT 0,
-  actual_hours NUMERIC DEFAULT 0,
-  is_tracking_time BOOLEAN DEFAULT false,
-  last_time_log_start BIGINT,
-  assignee TEXT,
-  participants TEXT[],
-  watchers TEXT[],
-  custom_fields JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -143,24 +157,32 @@ CREATE TABLE IF NOT EXISTS public.comments (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 7. Financeiro
-CREATE TABLE IF NOT EXISTS public.transactions (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  date DATE NOT NULL,
-  description TEXT NOT NULL,
-  category TEXT,
-  amount NUMERIC DEFAULT 0,
-  type TEXT CHECK (type IN ('income', 'expense')),
-  status TEXT CHECK (status IN ('paid', 'pending')),
-  frequency TEXT DEFAULT 'single',
-  installments INTEGER,
-  client_id UUID REFERENCES public.clients(id) ON DELETE SET NULL,
-  partner_id UUID REFERENCES public.partners(id) ON DELETE SET NULL,
-  custom_fields JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+-- 3. GARANTIA DE COLUNAS (MIGRAÇÕES)
+DO $$
+BEGIN
+    -- Clients: custom_fields
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='custom_fields') THEN
+        ALTER TABLE public.clients ADD COLUMN custom_fields JSONB DEFAULT '{}'::jsonb;
+    END IF;
+    -- Partners: cost_per_seat & custom_fields
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='partners' AND column_name='cost_per_seat') THEN
+        ALTER TABLE public.partners ADD COLUMN cost_per_seat NUMERIC DEFAULT 0;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='partners' AND column_name='custom_fields') THEN
+        ALTER TABLE public.partners ADD COLUMN custom_fields JSONB DEFAULT '{}'::jsonb;
+    END IF;
+    -- Transactions: custom_fields
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='transactions' AND column_name='custom_fields') THEN
+        ALTER TABLE public.transactions ADD COLUMN custom_fields JSONB DEFAULT '{}'::jsonb;
+    END IF;
+    -- Tasks: time tracking
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tasks' AND column_name='is_tracking_time') THEN
+        ALTER TABLE public.tasks ADD COLUMN is_tracking_time BOOLEAN DEFAULT false;
+    END IF;
+END
+$$;
 
--- 8. Políticas de Segurança
+-- 4. RLS (Segurança)
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
@@ -188,27 +210,13 @@ CREATE POLICY "Public Access TransCats" ON public.transaction_categories FOR ALL
 CREATE POLICY "Public Access CFs" ON public.custom_field_definitions FOR ALL USING (true);
 CREATE POLICY "Public Access Templates" ON public.task_template_groups FOR ALL USING (true);
 CREATE POLICY "Public Access Settings" ON public.app_settings FOR ALL USING (true);
-
--- 9. Dados Iniciais
-INSERT INTO public.sla_tiers (name, price, included_hours, description, features) VALUES
-('Standard', 2500, 20, 'Manutenção e suporte reativo.', '["Suporte via Email", "SLA 48h"]'::jsonb), 
-('Professional', 5000, 50, 'Evolução contínua e automações.', '["Suporte Prioritário", "Gerente de Contas", "SLA 24h"]'::jsonb), 
-('Enterprise', 12000, 120, 'Squad dedicado e prioridade alta.', '["Squad Exclusivo", "Reuniões Semanais", "SLA 4h"]'::jsonb)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.service_categories (name, is_billable) VALUES
-('Automacao', true), ('Financeiro', false), ('Suporte', false), ('Reunião', true), ('Comercial', true)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.transaction_categories (name) VALUES
-('Receita Recorrente'), ('Serviço Pontual'), ('Infraestrutura'), ('Pessoal'), ('Impostos')
-ON CONFLICT DO NOTHING;
 `;
 
 export const SettingsModule: React.FC = () => {
   const [activeSection, setActiveSection] = useState('capacity');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'offline' | 'error'>('checking');
   
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
   const [newCF, setNewCF] = useState<Partial<CustomFieldDefinition>>({ entity: 'task', type: 'text', label: '', key: '' });
@@ -229,8 +237,7 @@ export const SettingsModule: React.FC = () => {
   });
   const [userProfile, setUserProfile] = useState({ name: 'Admin User', role: 'CTO', email: 'admin@tuesday.com' });
 
-  // DB State
-  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'offline' | 'error'>('checking');
+  // DB Auth
   const [supaUrl, setSupaUrl] = useState('');
   const [supaKey, setSupaKey] = useState('');
 
@@ -276,7 +283,7 @@ export const SettingsModule: React.FC = () => {
           const { error } = await supabase.from('app_settings').select('*', { count: 'exact', head: true });
           if (error) {
               if (error.code === 'PGRST116' || error.code === '42P01') { 
-                  setDbStatus('connected');
+                  setDbStatus('connected'); // Connected but table missing
               } else {
                   console.error("DB Check Error:", error.message);
                   setDbStatus('error');
@@ -309,7 +316,7 @@ export const SettingsModule: React.FC = () => {
 
   const handleCopySQL = () => {
       navigator.clipboard.writeText(SQL_SCHEMA);
-      alert('SQL copiado! Cole no SQL Editor do Supabase e execute.');
+      alert('SQL copiado! Cole no SQL Editor do Supabase e execute para atualizar suas tabelas.');
   };
 
   const handleAddCF = async () => {
@@ -328,7 +335,7 @@ export const SettingsModule: React.FC = () => {
 
   const handleSaveWorkConfig = async () => {
       await api.saveWorkConfig(workConfig);
-      alert('Configurações de capacidade e SLA salvas! O agendamento automático respeitará estas regras.');
+      alert('Configurações de capacidade e SLA salvas!');
   };
 
   const toggleWorkDay = (day: number) => {
@@ -341,7 +348,7 @@ export const SettingsModule: React.FC = () => {
   const menuItems = [
     { id: 'capacity', label: 'Capacidade & SLA', icon: BarChart2 },
     { id: 'company', label: 'Dados da Empresa', icon: Building },
-    { id: 'database', label: 'Banco de Dados', icon: Terminal },
+    { id: 'database', label: 'Banco de Dados', icon: Database },
     { id: 'custom_fields', label: 'Campos Personalizados', icon: SquarePen },
     { id: 'profile', label: 'Meu Perfil', icon: User },
   ];
@@ -370,9 +377,26 @@ export const SettingsModule: React.FC = () => {
         </nav>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-10">
-        <div className="max-w-4xl mx-auto">
-          
+      <div className="flex-1 overflow-y-auto p-4 md:p-10 relative">
+        {/* GLOBAL SQL NOTIFICATION */}
+        <div className="absolute top-0 left-0 right-0 px-10 pt-4 z-10 pointer-events-none">
+            <div className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-6 py-3 rounded-xl shadow-lg shadow-indigo-500/20 flex justify-between items-center pointer-events-auto transform transition-all hover:scale-[1.01]">
+                <div className="flex items-center">
+                    <div className="p-2 bg-white/20 rounded-lg mr-3 animate-pulse">
+                        <BellRing size={20} />
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold">Lembrete de Sistema</p>
+                        <p className="text-xs text-indigo-100">O sistema precisa que as tabelas sejam criadas. Clique em "Ver Script" para rodar o SQL.</p>
+                    </div>
+                </div>
+                <button onClick={() => setActiveSection('database')} className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition-colors">
+                    Ver Script
+                </button>
+            </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto mt-20">
           {error && activeSection !== 'database' && (
               <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm flex items-center">
                   <AlertTriangle className="mr-2" size={16}/>
@@ -384,22 +408,6 @@ export const SettingsModule: React.FC = () => {
               <div className="space-y-6 animate-in fade-in duration-300">
                   <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Capacidade Operacional & SLA</h3>
                   
-                  {/* HOLIDAYS BLOCKER HIGHLIGHTED */}
-                  <div className="bg-indigo-50 rounded-2xl shadow-sm border border-indigo-100 p-6 flex justify-between items-center relative overflow-hidden">
-                      <div className="relative z-10">
-                          <h4 className="text-lg font-bold text-indigo-900 flex items-center mb-1"><Coffee size={20} className="mr-2"/> Feriados e Folgas</h4>
-                          <p className="text-sm text-indigo-700 max-w-md">Ative para impedir automaticamente que tarefas sejam agendadas em feriados nacionais (BR) e fins de semana.</p>
-                      </div>
-                      <div className="relative z-10 flex items-center bg-white px-4 py-2 rounded-xl shadow-sm border border-indigo-100">
-                          <span className="text-sm font-bold text-indigo-900 mr-3">Bloquear Agenda</span>
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" className="sr-only peer" checked={workConfig.blockHolidays || false} onChange={e => setWorkConfig({...workConfig, blockHolidays: e.target.checked})} />
-                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                          </label>
-                      </div>
-                      <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-white/30 to-transparent pointer-events-none"></div>
-                  </div>
-
                   {/* WORK DAYS & HOURS */}
                   <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
                       <h4 className="text-lg font-bold text-slate-800 mb-6 flex items-center"><CalendarDays size={20} className="mr-2 text-indigo-600"/> Jornada de Trabalho</h4>
@@ -523,8 +531,8 @@ export const SettingsModule: React.FC = () => {
                   <div className="relative">
                       <div className="flex justify-between items-end mb-2">
                           <div>
-                            <h4 className="text-sm font-bold text-slate-600">Script SQL de Instalação (Atualizado)</h4>
-                            <p className="text-xs text-slate-500">Inclui tabelas de templates, usuários, permissões e colunas novas (features, cost_per_seat).</p>
+                            <h4 className="text-sm font-bold text-slate-600">Script SQL de Atualização</h4>
+                            <p className="text-xs text-slate-500">Copie e execute no SQL Editor do Supabase para corrigir todas as tabelas.</p>
                           </div>
                           <button onClick={handleCopySQL} className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition-colors">Copiar SQL</button>
                       </div>

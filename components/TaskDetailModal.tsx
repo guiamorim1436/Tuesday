@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar, Clock, CheckSquare, MessageSquare, Trash2, Save, User, Flag, ArrowRight, Paperclip, Send, Square, CheckCircle2, Loader2, Sparkles, Bot, Play, PauseCircle, Timer } from 'lucide-react';
 import { Task, TaskPriority, TaskStatus, Subtask, Comment } from '../types';
@@ -22,7 +21,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
   
   // Timer State
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
