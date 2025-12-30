@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, CheckCircle, XCircle, PauseCircle, Clock, Building2, Wallet, Plus, Edit2, Trash2, X, Save, DollarSign, Rocket, ShieldCheck, Zap, Layers, Filter, Loader2, Download, Upload, CheckSquare, Square } from 'lucide-react';
+import { Search, CheckCircle, XCircle, PauseCircle, Clock, Building2, Wallet, Plus, Edit2, Trash2, X, Save, DollarSign, Rocket, ShieldCheck, Zap, Layers, Filter, Loader2, Download, Upload, CheckSquare, Square, Calendar } from 'lucide-react';
 import { ClientStatus, Client, Partner, ServiceCategory, SLATier, CustomFieldDefinition, TaskTemplateGroup, Task, TaskStatus } from '../types';
 import { api } from '../services/api';
 import { DEFAULT_TASK_TEMPLATES } from '../constants';
@@ -430,7 +430,6 @@ export const ClientManager: React.FC = () => {
 
                    return (
                   <tr key={client.id} className={`hover:bg-slate-50 transition-colors group ${isSelected ? 'bg-indigo-50/40' : ''}`}>
-                    {/* ... (Existing Row Content) ... */}
                     <td className="px-6 py-4">
                         <button onClick={() => toggleSelection(client.id)} className={`${isSelected ? 'text-indigo-600' : 'text-slate-300 hover:text-indigo-400'} transition-colors`}>
                            {isSelected ? <CheckSquare size={20}/> : <Square size={20}/>}
@@ -589,7 +588,6 @@ export const ClientManager: React.FC = () => {
       />
 
       {/* ... (Existing Modals) ... */}
-      {/* Re-inserting modal code to ensure file integrity */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
@@ -658,6 +656,20 @@ export const ClientManager: React.FC = () => {
                                         ))}
                                     </select>
                                 </div>
+                                <div className="mt-3">
+                                    <label className="block text-xs font-medium text-indigo-900 mb-1">Dia de Vencimento (Fatura)</label>
+                                    <div className="relative">
+                                        <Calendar size={14} className="absolute left-3 top-2.5 text-indigo-400" />
+                                        <input 
+                                            type="number" 
+                                            min="1" max="31"
+                                            className="w-full pl-8 pr-3 py-2 bg-white border border-indigo-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                                            value={editingClient.billingDay || ''}
+                                            onChange={(e) => setEditingClient({...editingClient, billingDay: Number(e.target.value)})}
+                                            placeholder="Ex: 5"
+                                        />
+                                    </div>
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Data de Início (Implementação)</label>
@@ -666,6 +678,22 @@ export const ClientManager: React.FC = () => {
                                     className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                                     value={editingClient.onboardingDate}
                                     onChange={(e) => setEditingClient({...editingClient, onboardingDate: e.target.value})}
+                                />
+                            </div>
+                        </>
+                    )}
+                    
+                    {activeTab === 'partners' && (
+                        <>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Dia de Vencimento (Comissão)</label>
+                                <input 
+                                    type="number"
+                                    min="1" max="31"
+                                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    value={editingPartner.billingDay || ''}
+                                    onChange={e => setEditingPartner({...editingPartner, billingDay: Number(e.target.value)})}
+                                    placeholder="Ex: 10"
                                 />
                             </div>
                         </>

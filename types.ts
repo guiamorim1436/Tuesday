@@ -1,8 +1,9 @@
 
 // Domain Entities
 
+// We keep the Enum for default logic, but the app handles strings now
 export enum TaskStatus {
-  REQUESTED = 'Solicitado', // New status for portal requests
+  REQUESTED = 'Solicitado', 
   BACKLOG = 'Backlog',
   IN_PROGRESS = 'Em Execução',
   WAITING = 'Aguardando',
@@ -30,6 +31,7 @@ export interface Partner {
   totalCommissionPaid: number;
   implementationFee: number;
   implementationDays: number;
+  billingDay?: number; // New Field
   customFields?: Record<string, any>;
 }
 
@@ -42,6 +44,7 @@ export interface Client {
   onboardingDate: string;
   healthScore: number;
   hoursUsedMonth: number;
+  billingDay?: number; // New Field
   customFields?: Record<string, any>;
 }
 
@@ -68,7 +71,7 @@ export interface Task {
   title: string;
   description: string;
   clientId: string;
-  status: TaskStatus;
+  status: string; // Changed from Enum to string to support custom statuses
   priority: TaskPriority;
   
   startDate: string;
@@ -86,11 +89,11 @@ export interface Task {
   
   subtasks: Subtask[];
   comments: Comment[];
-  customFields: Record<string, string | number | boolean>;
+  customFields: Record<string, any>;
   isTrackingTime?: boolean;
   lastTimeLogStart?: number; 
   
-  requestedBy?: string; // ID of the user who requested
+  requestedBy?: string; 
 }
 
 export interface FinanceMetric {
@@ -124,7 +127,7 @@ export interface CustomFieldDefinition {
   entity: EntityType;
   key: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'date';
+  type: 'text' | 'number' | 'currency' | 'date' | 'select' | 'time' | 'url' | 'attachment'; // Expanded Types
   options?: string[]; 
 }
 
@@ -148,6 +151,7 @@ export interface WorkConfig {
   workHoursEnd: string;
   maxTasksPerDay: number;
   maxEmergencyPerDay: number;
+  taskStatuses?: string[]; // Custom statuses configuration
 }
 
 // --- SETTINGS & AUTH ---
@@ -158,10 +162,10 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  password?: string; // Mock only
+  password?: string; 
   role: UserRole;
-  approved: boolean; // Admin must approve
-  linkedEntityId?: string; // ID of Client or Partner company
+  approved: boolean; 
+  linkedEntityId?: string; 
   avatar: string;
 }
 

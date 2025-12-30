@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Filter, Plus, Clock, X, Calendar as CalendarIcon, AlignLeft, CheckCircle2, Play, Pause, Send, Trash2, Layout, List, BarChart2, Paperclip, Sparkles, UserPlus, CheckSquare, Search, Loader2, ArrowRightCircle, AlertTriangle } from 'lucide-react';
+import { Filter, Plus, Clock, X, Calendar as CalendarIcon, AlignLeft, CheckCircle2, Play, Pause, Send, Trash2, Layout, List, BarChart2, Paperclip, Sparkles, UserPlus, CheckSquare, Search, Loader2, ArrowRightCircle, AlertTriangle, Link, DollarSign } from 'lucide-react';
 import { TaskStatus, TaskPriority, Task, Comment, ServiceCategory, WorkConfig, CustomFieldDefinition, Subtask, Client } from '../types';
 import { api } from '../services/api';
 import { DEFAULT_WORK_CONFIG } from '../constants';
 import { GoogleGenAI } from "@google/genai";
 
-type ViewMode = 'kanban' | 'kanban_day' | 'list' | 'calendar' | 'timeline';
+type ViewMode = 'kanban' | 'kanban_time' | 'list' | 'calendar' | 'timeline';
 
 export const TaskBoard: React.FC = () => {
   // Application State
@@ -209,6 +209,12 @@ export const TaskBoard: React.FC = () => {
     }
   };
 
+  const updateCustomField = (taskId: string, key: string, value: any) => {
+      if (!selectedTask) return;
+      const updatedFields = { ...selectedTask.customFields, [key]: value };
+      updateTask({ ...selectedTask, customFields: updatedFields });
+  };
+
   const handleAddSubtask = async () => {
       if(!selectedTask) return;
       try {
@@ -293,7 +299,7 @@ export const TaskBoard: React.FC = () => {
             draggable
             onDragStart={(e) => { setDraggedTaskId(task.id); e.dataTransfer.effectAllowed = 'move'; }}
             onClick={() => setSelectedTask(task)}
-            className={`bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer relative ${task.isTrackingTime ? 'border-l-4 border-l-indigo-500' : ''}`}
+            className={`bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer relative mb-3 ${task.isTrackingTime ? 'border-l-4 border-l-indigo-500' : ''}`}
         >
             <div className="flex justify-between items-start mb-2">
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${getPriorityColor(task.priority)}`}>{task.priority}</span>
@@ -339,7 +345,7 @@ export const TaskBoard: React.FC = () => {
                 <h3 className="font-semibold text-slate-700 text-sm uppercase tracking-wide">{col.title}</h3>
                 <span className="bg-slate-200 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-full">{filteredTasks.filter(t => t.status === col.id).length}</span>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-3 pr-2 pb-20">
+              <div className="flex-1 overflow-y-auto pr-2 pb-20">
                 {filteredTasks.filter(t => t.status === col.id).map(renderTaskCard)}
               </div>
             </div>
@@ -348,48 +354,42 @@ export const TaskBoard: React.FC = () => {
       );
   };
 
-  const renderDayKanban = () => {
+  const renderTimeKanban = () => {
       const today = new Date();
-      // Get current week Monday
-      const day = today.getDay() || 7; 
-      if(day !== 1) today.setHours(-24 * (day - 1));
-      
-      const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'].map((d, i) => {
-          const date = new Date(today);
-          date.setDate(today.getDate() + i);
-          return { name: d, date: date.toISOString().split('T')[0] };
-      });
+      today.setHours(0,0,0,0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
 
-      const overdue = filteredTasks.filter(t => t.status !== TaskStatus.DONE && t.dueDate < days[0].date);
+      const isToday = (d: string) => new Date(d).toISOString().split('T')[0] === today.toISOString().split('T')[0];
+      const isTomorrow = (d: string) => new Date(d).toISOString().split('T')[0] === tomorrow.toISOString().split('T')[0];
+      const isFuture = (d: string) => new Date(d) > tomorrow;
+      const isOverdue = (d: string) => new Date(d) < today;
+
+      const overdue = filteredTasks.filter(t => t.status !== TaskStatus.DONE && isOverdue(t.dueDate));
+      const todays = filteredTasks.filter(t => t.status !== TaskStatus.DONE && isToday(t.dueDate));
+      const tomorrows = filteredTasks.filter(t => t.status !== TaskStatus.DONE && isTomorrow(t.dueDate));
+      const futures = filteredTasks.filter(t => t.status !== TaskStatus.DONE && isFuture(t.dueDate));
+
+      const columns = [
+          { title: 'Atrasado', tasks: overdue, color: 'border-rose-400', bg: 'bg-rose-50/50' },
+          { title: 'Hoje', tasks: todays, color: 'border-emerald-400', bg: '' },
+          { title: 'Amanhã', tasks: tomorrows, color: 'border-indigo-400', bg: '' },
+          { title: 'Futuro', tasks: futures, color: 'border-slate-300', bg: '' },
+      ];
 
       return (
-          <div className="flex h-full space-x-4 min-w-[1200px] pb-4">
-              <div className="flex-1 min-w-[260px] bg-rose-50/50 rounded-xl p-2">
-                  <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-rose-300">
-                      <h3 className="font-bold text-rose-700 text-sm uppercase">Atrasados</h3>
-                      <span className="bg-rose-200 text-rose-700 text-xs font-bold px-2 py-0.5 rounded-full">{overdue.length}</span>
+          <div className="flex h-full space-x-4 min-w-[1000px] pb-4">
+              {columns.map((col, idx) => (
+                  <div key={idx} className={`flex-1 flex flex-col h-full min-w-[260px] rounded-xl p-2 ${col.bg}`}>
+                      <div className={`flex items-center justify-between mb-4 pb-2 border-b-2 ${col.color}`}>
+                          <h3 className="font-bold text-slate-700 text-sm uppercase">{col.title}</h3>
+                          <span className="bg-slate-200 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-full">{col.tasks.length}</span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto pr-2 pb-20">
+                          {col.tasks.map(renderTaskCard)}
+                      </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto space-y-3 pb-20">
-                      {overdue.map(renderTaskCard)}
-                  </div>
-              </div>
-              {days.map(d => {
-                  const dayTasks = filteredTasks.filter(t => t.dueDate === d.date && t.status !== TaskStatus.DONE);
-                  return (
-                    <div key={d.date} className="flex-1 flex flex-col h-full min-w-[260px]">
-                        <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-slate-300">
-                            <div>
-                                <h3 className="font-semibold text-slate-700 text-sm uppercase">{d.name}</h3>
-                                <span className="text-xs text-slate-400">{d.date.split('-').reverse().slice(0,2).join('/')}</span>
-                            </div>
-                            <span className="bg-slate-200 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-full">{dayTasks.length}</span>
-                        </div>
-                        <div className="flex-1 overflow-y-auto space-y-3 pr-2 pb-20">
-                            {dayTasks.map(renderTaskCard)}
-                        </div>
-                    </div>
-                  );
-              })}
+              ))}
           </div>
       );
   };
@@ -508,17 +508,17 @@ export const TaskBoard: React.FC = () => {
             </div>
 
             <div className="ml-auto flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-             <button onClick={() => setViewMode('kanban')} className={`px-3 py-1.5 text-xs font-bold rounded ${viewMode === 'kanban' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Kanban</button>
-             <button onClick={() => setViewMode('kanban_day')} className={`px-3 py-1.5 text-xs font-bold rounded ${viewMode === 'kanban_day' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Dias</button>
+             <button onClick={() => setViewMode('kanban')} className={`px-3 py-1.5 text-xs font-bold rounded ${viewMode === 'kanban' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Status</button>
+             <button onClick={() => setViewMode('kanban_time')} className={`px-3 py-1.5 text-xs font-bold rounded ${viewMode === 'kanban_time' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Prazo</button>
              <button onClick={() => setViewMode('calendar')} className={`px-3 py-1.5 text-xs font-bold rounded ${viewMode === 'calendar' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Calendário</button>
-             <button onClick={() => setViewMode('timeline')} className={`px-3 py-1.5 text-xs font-bold rounded ${viewMode === 'timeline' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Cronograma</button>
+             <button onClick={() => setViewMode('timeline')} className={`px-3 py-1.5 text-xs font-bold rounded ${viewMode === 'timeline' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Timeline</button>
              <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 text-xs font-bold rounded ${viewMode === 'list' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Lista</button>
             </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col p-6">
-          {/* Approval Queue (Only if Admin or relevant tasks exist) */}
+          {/* Approval Queue */}
           {requestedTasks.length > 0 && (
               <div className="mb-6 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
                   <h4 className="font-bold text-indigo-800 text-sm mb-3 flex items-center"><AlertTriangle size={16} className="mr-2"/> Fila de Aprovação ({requestedTasks.length})</h4>
@@ -537,15 +537,13 @@ export const TaskBoard: React.FC = () => {
 
           <div className="flex-1 overflow-x-auto overflow-y-hidden">
             {viewMode === 'kanban' && renderKanban()}
-            {viewMode === 'kanban_day' && renderDayKanban()}
+            {viewMode === 'kanban_time' && renderTimeKanban()}
             {viewMode === 'calendar' && renderCalendar()}
             {viewMode === 'timeline' && renderTimeline()}
             {viewMode === 'list' && renderList()}
           </div>
       </div>
 
-      {/* NEW TASK & DETAIL MODALS (Same as before, kept for context) */}
-      {/* ... keeping the modals but ensuring they use handleCreateTask etc ... */}
       {/* NEW TASK MODAL */}
       {isNewTaskModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -607,9 +605,15 @@ export const TaskBoard: React.FC = () => {
                 <div className="flex justify-between items-start p-6 border-b border-slate-100 bg-slate-50/50">
                     <div className="pr-8 flex-1">
                         <div className="flex items-center space-x-3 mb-2">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${getPriorityColor(selectedTask.priority)}`}>{selectedTask.priority}</span>
+                            <select value={selectedTask.priority} onChange={(e) => updateTask({...selectedTask, priority: e.target.value as TaskPriority})} className={`text-xs font-bold px-2 py-0.5 rounded border uppercase tracking-wider bg-white outline-none cursor-pointer ${getPriorityColor(selectedTask.priority)}`}>
+                                {Object.values(TaskPriority).map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
                             <span className="text-xs text-slate-500 font-mono">#{selectedTask.id.substring(0,8)}</span>
-                            <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded">{selectedTask.category}</span>
+                            
+                            <select value={selectedTask.category} onChange={(e) => updateTask({...selectedTask, category: e.target.value})} className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded border-none outline-none cursor-pointer">
+                                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                            </select>
+
                             {selectedTask.status === TaskStatus.REQUESTED && <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">Aprovação Pendente</span>}
                         </div>
                         <input value={selectedTask.title} onChange={(e) => updateTask({...selectedTask, title: e.target.value})} className="text-2xl font-bold text-slate-900 leading-tight w-full bg-transparent border-none focus:ring-0 focus:border-b focus:border-indigo-500 px-0"/>
@@ -628,6 +632,40 @@ export const TaskBoard: React.FC = () => {
                                 <h4 className="flex items-center text-sm font-bold text-slate-900 uppercase tracking-wider mb-3"><AlignLeft size={16} className="mr-2 text-slate-400"/>Descrição</h4>
                                 <textarea value={selectedTask.description} onChange={(e) => updateTask({...selectedTask, description: e.target.value})} rows={6} className="w-full text-slate-700 text-sm leading-relaxed bg-white p-4 rounded-lg border border-slate-200 focus:ring-1 focus:ring-indigo-500 transition-all resize-none"/>
                             </div>
+                            
+                            {/* Custom Fields */}
+                            {customFieldsConfig.filter(f => f.entity === 'task').length > 0 && (
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Campos Personalizados</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {customFieldsConfig.filter(f => f.entity === 'task').map(field => (
+                                            <div key={field.id}>
+                                                <label className="block text-xs font-medium text-slate-500 mb-1">{field.label}</label>
+                                                {field.type === 'select' ? (
+                                                    <select 
+                                                        className="w-full bg-white border border-slate-300 rounded px-2 py-1.5 text-sm"
+                                                        value={selectedTask.customFields[field.key] || ''}
+                                                        onChange={(e) => updateCustomField(selectedTask.id, field.key, e.target.value)}
+                                                    >
+                                                        <option value="">-</option>
+                                                        {/* Options would come from config, handled simply here */}
+                                                        <option value="Sim">Sim</option><option value="Não">Não</option>
+                                                    </select>
+                                                ) : (
+                                                    <input 
+                                                        type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                                                        className="w-full bg-white border border-slate-300 rounded px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+                                                        value={selectedTask.customFields[field.key] || ''}
+                                                        onChange={(e) => updateCustomField(selectedTask.id, field.key, e.target.value)}
+                                                        placeholder={field.type === 'currency' ? 'R$ 0,00' : ''}
+                                                    />
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Subtasks */}
                             <div>
                                 <h4 className="flex items-center text-sm font-bold text-slate-900 uppercase tracking-wider mb-3"><CheckSquare size={16} className="mr-2 text-slate-400"/>Subtarefas</h4>
@@ -659,8 +697,9 @@ export const TaskBoard: React.FC = () => {
                         <div className="p-6 space-y-6 flex-1">
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Status</label>
-                                <select value={selectedTask.status} onChange={(e) => updateTask({...selectedTask, status: e.target.value as TaskStatus})} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:ring-indigo-500">
+                                <select value={selectedTask.status} onChange={(e) => updateTask({...selectedTask, status: e.target.value})} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:ring-indigo-500">
                                     {Object.values(TaskStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                                    {/* If we had dynamic statuses, map them here too */}
                                 </select>
                             </div>
                             <div className="pt-4 border-t border-slate-200 space-y-3">

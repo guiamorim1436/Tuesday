@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Layers, Lock, Mail, User, ArrowRight, Loader2 } from 'lucide-react';
+import { Layers, Lock, Mail, User, ArrowRight, Loader2, ShieldAlert } from 'lucide-react';
 import { api } from '../services/api';
 
 interface AuthProps {
@@ -39,6 +39,20 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleDevBypass = async () => {
+        // Force creates a temporary admin session
+        const devUser = {
+            id: 'dev-admin',
+            name: 'Dev Admin',
+            email: 'dev@admin.com',
+            role: 'admin',
+            approved: true,
+            avatar: 'DV'
+        };
+        localStorage.setItem('tuesday_current_user', JSON.stringify(devUser));
+        onLogin(devUser);
     };
 
     return (
@@ -106,6 +120,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                             {isLoading ? <Loader2 className="animate-spin"/> : (isLogin ? 'Entrar' : 'Cadastrar')}
                         </button>
                     </form>
+
+                    <div className="mt-4 pt-4 border-t border-slate-100">
+                        <button 
+                            type="button"
+                            onClick={handleDevBypass}
+                            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 rounded-lg transition-colors flex items-center justify-center text-xs"
+                        >
+                            <ShieldAlert size={14} className="mr-2"/> Modo Admin (Dev Bypass)
+                        </button>
+                    </div>
 
                     <div className="mt-6 text-center">
                         <button onClick={() => setIsLogin(!isLogin)} className="text-sm text-indigo-600 hover:underline font-medium">

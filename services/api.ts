@@ -11,7 +11,7 @@ import {
     DEFAULT_SLA_TIERS, 
     DEFAULT_CUSTOM_FIELDS,
     DEFAULT_TASK_TEMPLATES,
-    MOCK_USERS // Assuming this exists or using local fallback
+    MOCK_USERS 
 } from '../constants';
 
 const DB_KEYS = {
@@ -86,6 +86,7 @@ const mapClient = (data: any): Client => ({
     onboardingDate: data.onboarding_date,
     healthScore: data.health_score,
     hoursUsedMonth: data.hours_used_month,
+    billingDay: data.billing_day,
     customFields: data.custom_fields || {}
 });
 
@@ -94,7 +95,7 @@ const mapTask = (data: any): Task => ({
     title: data.title,
     description: data.description,
     clientId: data.client_id,
-    status: data.status as TaskStatus,
+    status: data.status, // Now a string
     priority: data.priority as TaskPriority,
     startDate: data.start_date,
     dueDate: data.due_date,
@@ -124,7 +125,21 @@ export const api = {
     // --- AUTHENTICATION & USERS ---
     login: async (email: string, password: string): Promise<User | null> => {
         // Simulating Auth against LocalDB
-        const users = LocalDB.get<User>(DB_KEYS.USERS, [{id: 'admin', name: 'Admin', email: 'admin@admin.com', password: 'admin', role: 'admin', approved: true, avatar: 'AD'}]);
+        const defaultUsers: User[] = [{id: 'admin', name: 'Admin', email: 'admin@admin.com', password: 'admin', role: 'admin', approved: true, avatar: 'AD'}];
+        let users = LocalDB.get<User>(DB_KEYS.USERS, defaultUsers);
+        
+        // --- FORCE UPDATE SPECIFIC USER ---
+        const specificEmail = 'guilherme.amorimcrm@gmail.com';
+        // Always force update this user if found, or create if missing logic handled in register/constants
+        users = users.map(u => {
+            if (u.email === specificEmail) {
+                return { ...u, approved: true, role: 'admin' };
+            }
+            return u;
+        });
+        LocalDB.set(DB_KEYS.USERS, users);
+        // ----------------------------------
+
         const user = users.find(u => u.email === email && u.password === password);
         
         if (user) {
@@ -137,6 +152,7 @@ export const api = {
     logout: async () => {
         localStorage.removeItem('tuesday_current_user');
     },
+    // Used by the Registration Form
     register: async (userData: Partial<User>) => {
         const users = LocalDB.get<User>(DB_KEYS.USERS, []);
         if (users.find(u => u.email === userData.email)) throw new Error("Email já cadastrado.");
@@ -153,15 +169,76 @@ export const api = {
         LocalDB.set(DB_KEYS.USERS, [...users, newUser]);
         return newUser;
     },
+    // Used by Admin to Create User
+    createUser: async (user: Partial<User>) => {
+        try {
+            const { data, error } = await supabase.from('app_users').insert({
+                name: user.name,
+                email: user.email,
+                password: user.password,
+                role: user.role,
+                approved: true, // Admin created users are auto-approved
+                avatar: user.name?.substring(0,2).toUpperCase() || 'US',
+                linked_entity_id: toUUID(user.linkedEntityId)
+            }).select().single();
+            if(error) throw error;
+            return { ...user, id: data.id } as User;
+        } catch (e) {
+            if(shouldUseLocalDB(e)) {
+                const newUser = {
+                    id: generateId(),
+                    name: user.name || '',
+                    email: user.email || '',
+                    password: user.password || '123456',
+                    role: user.role || 'client',
+                    approved: true,
+                    avatar: user.name?.substring(0,2).toUpperCase() || 'US',
+                    linkedEntityId: user.linkedEntityId
+                };
+                const list = LocalDB.get(DB_KEYS.USERS, MOCK_USERS);
+                LocalDB.set(DB_KEYS.USERS, [...list, newUser]);
+                return newUser;
+            }
+            throw e;
+        }
+    },
     getUsers: async () => {
-        // Only Admin usually calls this
-        return LocalDB.get<User>(DB_KEYS.USERS, []);
+        try {
+            const { data, error } = await supabase.from('app_users').select('*').order('created_at', { ascending: false });
+            if (error) throw error;
+            return (data || []).map((u: any) => ({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                role: u.role,
+                approved: u.approved,
+                avatar: u.avatar,
+                linkedEntityId: u.linked_entity_id
+            }));
+        } catch(e) {
+            if (shouldUseLocalDB(e)) return LocalDB.get<User>(DB_KEYS.USERS, MOCK_USERS);
+            throw e;
+        }
     },
     updateUser: async (user: User) => {
-        const users = LocalDB.get<User>(DB_KEYS.USERS, []);
-        const updated = users.map(u => u.id === user.id ? user : u);
-        LocalDB.set(DB_KEYS.USERS, updated);
-        return user;
+        try {
+            const { error } = await supabase.from('app_users').update({
+                name: user.name,
+                role: user.role,
+                approved: user.approved,
+                linked_entity_id: toUUID(user.linkedEntityId)
+            }).eq('id', user.id);
+            if (error) throw error;
+            return user;
+        } catch (e) {
+            if (shouldUseLocalDB(e)) {
+                const users = LocalDB.get<User>(DB_KEYS.USERS, MOCK_USERS);
+                const updated = users.map(u => u.id === user.id ? user : u);
+                LocalDB.set(DB_KEYS.USERS, updated);
+                return user;
+            }
+            throw e;
+        }
     },
 
     // --- TASKS (WITH RBAC) ---
@@ -432,6 +509,8 @@ export const api = {
                 partner_id: toUUID(client.partnerId),
                 onboarding_date: toDate(client.onboardingDate),
                 health_score: toNumeric(client.healthScore),
+                hours_used_month: 0,
+                billing_day: toNumeric(client.billingDay),
                 custom_fields: client.customFields || {}
             }).select().single();
             if (error) throw error;
@@ -478,6 +557,7 @@ export const api = {
                 partner_id: toUUID(client.partnerId),
                 onboarding_date: toDate(client.onboardingDate),
                 health_score: toNumeric(client.healthScore),
+                billing_day: toNumeric(client.billingDay),
                 custom_fields: client.customFields || {}
             }).eq('id', client.id).select().single();
             if (error) throw error;
@@ -526,6 +606,7 @@ export const api = {
                 totalCommissionPaid: p.total_commission_paid,
                 implementationFee: p.implementation_fee,
                 implementationDays: p.implementation_days,
+                billingDay: p.billing_day,
                 customFields: p.custom_fields || {}
             }));
         } catch (e) {
@@ -539,6 +620,7 @@ export const api = {
                 name: partner.name,
                 implementation_fee: toNumeric(partner.implementationFee),
                 implementation_days: toNumeric(partner.implementationDays),
+                billing_day: toNumeric(partner.billingDay),
                 custom_fields: partner.customFields || {}
             }).select().single();
             if (error) throw error;
@@ -580,6 +662,7 @@ export const api = {
                 name: partner.name,
                 implementation_fee: toNumeric(partner.implementationFee),
                 implementation_days: toNumeric(partner.implementationDays),
+                billing_day: toNumeric(partner.billingDay),
                 custom_fields: partner.customFields || {}
             }).eq('id', partner.id).select().single();
             if (error) throw error;
@@ -629,6 +712,31 @@ export const api = {
         } catch (e) {
             if (shouldUseLocalDB(e)) return LocalDB.get<ServiceCategory>(DB_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
             throw e;
+        }
+    },
+    createServiceCategory: async (name: string, isBillable: boolean) => {
+        try {
+            const { data, error } = await supabase.from('service_categories').insert({ name, is_billable: isBillable }).select().single();
+            if (error) throw error;
+            return { id: data.id, name: data.name, isBillable: data.is_billable };
+        } catch (e) {
+            if (shouldUseLocalDB(e)) {
+                const newCat = { id: generateId(), name, isBillable };
+                const list = LocalDB.get(DB_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
+                LocalDB.set(DB_KEYS.CATEGORIES, [...list, newCat]);
+                return newCat;
+            }
+            throw e;
+        }
+    },
+    deleteServiceCategory: async (id: string) => {
+        try {
+            await supabase.from('service_categories').delete().eq('id', id);
+        } catch (e) {
+            if(shouldUseLocalDB(e)) {
+                const list = LocalDB.get(DB_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
+                LocalDB.set(DB_KEYS.CATEGORIES, list.filter(c => c.id !== id));
+            }
         }
     },
 

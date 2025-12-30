@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Bell, Key, Building, Save, Briefcase, Plus, Trash2, List, Clock, Terminal, AlertTriangle, Cloud, CloudOff, Wallet, Copy, RefreshCw, CheckCircle, Database, Loader2, CreditCard } from 'lucide-react';
+import { User, Bell, Key, Building, Save, Briefcase, Plus, Trash2, List, Clock, Terminal, AlertTriangle, Cloud, CloudOff, Wallet, Copy, RefreshCw, CheckCircle, Database, Loader2, CreditCard, LayoutTemplate, SquarePen } from 'lucide-react';
 import { ServiceCategory, SLATier, WorkConfig, User as UserType, CompanySettings, CustomFieldDefinition, TaskTemplateGroup, TaskTemplate, EntityType, TaskPriority } from '../types';
 import { DEFAULT_WORK_CONFIG } from '../constants';
 import { api } from '../services/api';
@@ -50,7 +50,19 @@ CREATE TABLE IF NOT EXISTS public.task_template_groups (
   templates JSONB
 );
 
--- 2. Entidades Principais
+-- 2. Usuários e Entidades
+CREATE TABLE IF NOT EXISTS public.app_users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  password TEXT, -- Mock password storage
+  role TEXT DEFAULT 'client',
+  approved BOOLEAN DEFAULT false,
+  avatar TEXT,
+  linked_entity_id UUID,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.partners (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
@@ -58,6 +70,7 @@ CREATE TABLE IF NOT EXISTS public.partners (
   total_commission_paid NUMERIC DEFAULT 0,
   implementation_fee NUMERIC DEFAULT 0,
   implementation_days INTEGER DEFAULT 0,
+  billing_day INTEGER,
   custom_fields JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -71,6 +84,7 @@ CREATE TABLE IF NOT EXISTS public.clients (
   onboarding_date DATE,
   health_score INTEGER DEFAULT 100,
   hours_used_month NUMERIC DEFAULT 0,
+  billing_day INTEGER,
   custom_fields JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -133,11 +147,13 @@ CREATE TABLE IF NOT EXISTS public.transactions (
 );
 
 -- 5. RLS
+ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 
+CREATE POLICY "Public Access" ON public.app_users FOR ALL USING (true);
 CREATE POLICY "Public Access" ON public.clients FOR ALL USING (true);
 CREATE POLICY "Public Access" ON public.partners FOR ALL USING (true);
 CREATE POLICY "Public Access" ON public.tasks FOR ALL USING (true);
@@ -170,8 +186,16 @@ export const SettingsModule: React.FC = () => {
   // Settings State
   const [transCategories, setTransCategories] = useState<{id: string, name: string}[]>([]);
   const [newTransCatName, setNewTransCatName] = useState('');
+  
+  const [taskCategories, setTaskCategories] = useState<ServiceCategory[]>([]);
+  const [newTaskCat, setNewTaskCat] = useState({ name: '', isBillable: true });
+
   const [slaTiers, setSlaTiers] = useState<SLATier[]>([]);
   const [newSLA, setNewSLA] = useState<Partial<SLATier>>({ name: '', price: 0, includedHours: 0, description: '' });
+  
+  const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
+  const [newCF, setNewCF] = useState<Partial<CustomFieldDefinition>>({ entity: 'task', type: 'text', label: '', key: '' });
+
   const [companySettings, setCompanySettings] = useState<CompanySettings>({ name: '', cnpj: '', email: '', phone: '', address: '', website: '' });
   const [userProfile, setUserProfile] = useState({ name: 'Admin User', role: 'CTO', email: 'admin@tuesday.com' });
 
@@ -194,14 +218,18 @@ export const SettingsModule: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-          const [transCats, slas, cSettings, uProfile] = await Promise.all([
+          const [transCats, taskCats, slas, cfs, cSettings, uProfile] = await Promise.all([
               api.getTransactionCategories(),
+              api.getServiceCategories(),
               api.getSLATiers(),
+              api.getCustomFields(),
               api.getCompanySettings(),
               api.getUserProfile()
           ]);
           setTransCategories(transCats);
+          setTaskCategories(taskCats);
           setSlaTiers(slas);
+          setCustomFields(cfs);
           setCompanySettings(cSettings);
           if (uProfile) setUserProfile(uProfile);
       } catch (e: any) {
@@ -300,6 +328,42 @@ export const SettingsModule: React.FC = () => {
       }
   };
 
+  const handleAddTaskCat = async () => {
+      if(!newTaskCat.name.trim()) return;
+      try {
+          const created = await api.createServiceCategory(newTaskCat.name, newTaskCat.isBillable);
+          setTaskCategories([...taskCategories, created]);
+          setNewTaskCat({ name: '', isBillable: true });
+      } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteTaskCat = async (id: string) => {
+      if(confirm('Excluir categoria de tarefa?')) {
+          try {
+              await api.deleteServiceCategory(id);
+              setTaskCategories(taskCategories.filter(c => c.id !== id));
+          } catch(e) { console.error(e); }
+      }
+  };
+
+  const handleAddCF = async () => {
+      if(!newCF.label || !newCF.key) return alert('Preencha label e key');
+      try {
+          const created = await api.createCustomField(newCF);
+          setCustomFields([...customFields, created]);
+          setNewCF({ entity: 'task', type: 'text', label: '', key: '' });
+      } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteCF = async (id: string) => {
+      if(confirm('Excluir campo personalizado?')) {
+          try {
+              await api.deleteCustomField(id);
+              setCustomFields(customFields.filter(f => f.id !== id));
+          } catch(e) { console.error(e); }
+      }
+  };
+
   const handleSaveProfile = async () => {
       await api.saveUserProfile(userProfile);
       alert('Perfil salvo!');
@@ -315,6 +379,8 @@ export const SettingsModule: React.FC = () => {
     { id: 'profile', label: 'Meu Perfil', icon: User },
     { id: 'company', label: 'Dados da Empresa', icon: Building },
     { id: 'plans', label: 'Planos de Serviço', icon: List },
+    { id: 'workflow', label: 'Workflow (Status & Categorias)', icon: LayoutTemplate },
+    { id: 'custom_fields', label: 'Campos Personalizados', icon: SquarePen },
     { id: 'finance', label: 'Categorias Financeiras', icon: Wallet },
   ];
 
@@ -470,6 +536,92 @@ export const SettingsModule: React.FC = () => {
                     ))}
                 </div>
              </div>
+          )}
+
+          {activeSection === 'workflow' && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-6">
+                  <h3 className="text-xl font-bold text-slate-800">Categorias de Tarefas</h3>
+                  <div className="flex space-x-3">
+                      <input className="flex-1 border border-slate-300 rounded-lg px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Nova Categoria (Ex: Design)" value={newTaskCat.name} onChange={e => setNewTaskCat({...newTaskCat, name: e.target.value})} />
+                      <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 rounded-lg">
+                          <input type="checkbox" id="billable" checked={newTaskCat.isBillable} onChange={e => setNewTaskCat({...newTaskCat, isBillable: e.target.checked})} />
+                          <label htmlFor="billable" className="text-sm text-slate-600 select-none cursor-pointer">Faturável</label>
+                      </div>
+                      <button onClick={handleAddTaskCat} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-sm transition-colors">Adicionar</button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                      {taskCategories.map(cat => (
+                          <div key={cat.id} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-lg group">
+                              <div className="flex items-center">
+                                  <span className="font-medium text-slate-700 mr-2">{cat.name}</span>
+                                  {cat.isBillable && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold">Faturável</span>}
+                              </div>
+                              <button onClick={() => handleDeleteTaskCat(cat.id)} className="text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16}/></button>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          )}
+
+          {activeSection === 'custom_fields' && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-6">
+                  <h3 className="text-xl font-bold text-slate-800">Campos Personalizados</h3>
+                  <div className="flex flex-wrap gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <div className="flex-1 min-w-[150px]">
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Nome do Campo</label>
+                          <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:ring-indigo-500 outline-none" placeholder="Ex: Link do Ticket" value={newCF.label} onChange={e => setNewCF({...newCF, label: e.target.value, key: e.target.value.toLowerCase().replace(/\s/g, '_')})} />
+                      </div>
+                      <div className="w-[150px]">
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Entidade</label>
+                          <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:ring-indigo-500 outline-none" value={newCF.entity} onChange={e => setNewCF({...newCF, entity: e.target.value as any})}>
+                              <option value="task">Tarefa</option>
+                              <option value="client">Cliente</option>
+                              <option value="partner">Parceiro</option>
+                              <option value="transaction">Transação</option>
+                          </select>
+                      </div>
+                      <div className="w-[150px]">
+                          <label className="block text-xs font-bold text-slate-500 mb-1">Tipo</label>
+                          <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:ring-indigo-500 outline-none" value={newCF.type} onChange={e => setNewCF({...newCF, type: e.target.value as any})}>
+                              <option value="text">Texto</option>
+                              <option value="number">Número</option>
+                              <option value="currency">Moeda</option>
+                              <option value="date">Data</option>
+                              <option value="time">Tempo</option>
+                              <option value="url">Link/URL</option>
+                              <option value="select">Lista (Dropdown)</option>
+                          </select>
+                      </div>
+                      <div className="flex items-end">
+                          <button onClick={handleAddCF} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors flex items-center">
+                              <Plus size={18} className="mr-1"/> Criar
+                          </button>
+                      </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                      {['task', 'client', 'partner', 'transaction'].map(entity => {
+                          const fields = customFields.filter(f => f.entity === entity);
+                          if (fields.length === 0) return null;
+                          return (
+                              <div key={entity} className="border-t border-slate-100 pt-4">
+                                  <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">{entity === 'task' ? 'Tarefas' : entity === 'client' ? 'Clientes' : entity === 'partner' ? 'Parceiros' : 'Financeiro'}</h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {fields.map(field => (
+                                          <div key={field.id} className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-lg group">
+                                              <div>
+                                                  <span className="font-bold text-slate-800 block">{field.label}</span>
+                                                  <span className="text-xs text-slate-400 font-mono">key: {field.key} | type: {field.type}</span>
+                                              </div>
+                                              <button onClick={() => handleDeleteCF(field.id)} className="text-slate-300 hover:text-rose-600 transition-colors"><Trash2 size={16}/></button>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          );
+                      })}
+                  </div>
+              </div>
           )}
 
           {activeSection === 'finance' && (

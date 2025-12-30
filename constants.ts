@@ -1,3 +1,4 @@
+
 import { Client, ClientStatus, Partner, Task, TaskPriority, TaskStatus, FinanceMetric, CustomFieldDefinition, Transaction, ServiceCategory, SLATier, WorkConfig, User, CatalogItem, Proposal, Lead, CRMStage, TaskTemplateGroup } from './types';
 
 // Custom Fields Configuration
@@ -240,6 +241,7 @@ export const MOCK_USERS: User[] = [
     { id: 'u1', name: 'Admin User', email: 'admin@nexus-os.com', role: 'admin', approved: true, avatar: 'AD' },
     { id: 'u2', name: 'Carlos Silva', email: 'carlos@nexus-os.com', role: 'admin', approved: true, avatar: 'CS' },
     { id: 'u3', name: 'Ana Souza', email: 'ana@nexus-os.com', role: 'admin', approved: true, avatar: 'AS' },
+    { id: 'u4', name: 'Guilherme Amorim', email: 'guilherme.amorimcrm@gmail.com', role: 'admin', approved: true, avatar: 'GA' }
 ];
 
 // Mock Catalog
