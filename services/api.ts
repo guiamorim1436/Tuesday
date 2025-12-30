@@ -1,6 +1,6 @@
 
 import { supabase, isConfigured } from '../lib/supabaseClient';
-import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup, User, UserRole } from '../types';
+import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup, User, UserRole, Comment } from '../types';
 import { 
     DEFAULT_WORK_CONFIG, 
     MOCK_CLIENTS, 
@@ -13,6 +13,7 @@ import {
     DEFAULT_TASK_TEMPLATES,
     MOCK_USERS 
 } from '../constants';
+import { GoogleGenAI } from "@google/genai";
 
 const DB_KEYS = {
     CLIENTS: 'tuesday_db_clients',
@@ -27,7 +28,7 @@ const DB_KEYS = {
     SETTINGS_WORK: 'tuesday_db_settings_work',
     SETTINGS_PROFILE: 'tuesday_db_settings_profile',
     TEMPLATES: 'tuesday_db_templates',
-    USERS: 'tuesday_db_users' // New key for users
+    USERS: 'tuesday_db_users'
 };
 
 const LocalDB = {
@@ -76,6 +77,82 @@ const toUUID = (val?: string | null) => (!val || val.trim() === '') ? null : val
 const toDate = (val?: string | null) => (!val || val.trim() === '') ? null : val;
 const toNumeric = (val?: number | string | null) => (val === null || val === undefined || val === '') ? 0 : Number(val);
 
+// Helper for Holidays (Mock for demo)
+const isHoliday = (date: Date): boolean => {
+    const d = date.getDate();
+    const m = date.getMonth(); // 0-indexed
+    // Fixed Holidays (Brazil)
+    if (m === 0 && d === 1) return true; // Confraternização Universal
+    if (m === 3 && d === 21) return true; // Tiradentes
+    if (m === 4 && d === 1) return true; // Dia do Trabalho
+    if (m === 8 && d === 7) return true; // Independência
+    if (m === 9 && d === 12) return true; // Nossa Sra. Aparecida
+    if (m === 10 && d === 2) return true; // Finados
+    if (m === 10 && d === 15) return true; // Proclamação da República
+    if (m === 11 && d === 25) return true; // Natal
+    return false;
+};
+
+// --- SCHEDULING ENGINE ---
+const calculateNextAvailableSlot = async (priority: TaskPriority, existingTasks: Task[], config: WorkConfig): Promise<string> => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    
+    // 1. Determine Initial Offset based on rules
+    let daysToAdd = 0;
+    switch(priority) {
+        case TaskPriority.CRITICAL: daysToAdd = config.slaOffsetCritical || 0; break; // Default 0 (Same day)
+        case TaskPriority.HIGH: daysToAdd = config.slaOffsetHigh || 1; break; // Default 1 (Next day)
+        case TaskPriority.MEDIUM: daysToAdd = config.slaOffsetMedium || 3; break; // Default 3
+        case TaskPriority.LOW: daysToAdd = config.slaOffsetLow || 5; break;
+        default: daysToAdd = 3;
+    }
+
+    let targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + daysToAdd);
+
+    // 2. Find first valid slot
+    // We try for up to 30 days to find a slot. If fully booked for a month, that's an issue.
+    for(let i = 0; i < 45; i++) {
+        const dayOfWeek = targetDate.getDay(); // 0=Sun, 6=Sat
+        const isWorkDay = config.workDays.includes(dayOfWeek);
+        const isBlockedHoliday = config.blockHolidays && isHoliday(targetDate);
+
+        if (isWorkDay && !isBlockedHoliday) {
+            // Check Capacity for this specific date
+            const dateStr = targetDate.toISOString().split('T')[0];
+            const tasksOnDate = existingTasks.filter(t => t.startDate === dateStr && t.status !== TaskStatus.DONE);
+            
+            const totalLoad = tasksOnDate.length;
+            const criticalLoad = tasksOnDate.filter(t => t.priority === TaskPriority.CRITICAL).length;
+            const highLoad = tasksOnDate.filter(t => t.priority === TaskPriority.HIGH).length;
+
+            let hasSpace = true;
+
+            // Global Limit
+            if (totalLoad >= config.maxTasksPerDay) hasSpace = false;
+
+            // Specific Limits
+            if (priority === TaskPriority.CRITICAL && criticalLoad >= config.maxCriticalPerDay) hasSpace = false;
+            if (priority === TaskPriority.HIGH && highLoad >= config.maxHighPerDay) hasSpace = false;
+
+            // If it's a critical task, we might squeeze it in if total load isn't blown, 
+            // even if "normal" slots are full, but sticking to strict config for now.
+            
+            if (hasSpace) {
+                return dateStr;
+            }
+        }
+        
+        // Move to next day
+        targetDate.setDate(targetDate.getDate() + 1);
+    }
+
+    // Fallback: Return date 45 days from now if completely full
+    return targetDate.toISOString().split('T')[0];
+};
+
+
 // --- MAPPERS ---
 const mapClient = (data: any): Client => ({
     id: data.id,
@@ -95,7 +172,7 @@ const mapTask = (data: any): Task => ({
     title: data.title,
     description: data.description,
     clientId: data.client_id,
-    status: data.status, // Now a string
+    status: data.status,
     priority: data.priority as TaskPriority,
     startDate: data.start_date,
     dueDate: data.due_date,
@@ -122,24 +199,41 @@ const mapTask = (data: any): Task => ({
 });
 
 export const api = {
+    // --- AI FEATURES ---
+    summarizeComments: async (comments: Comment[]): Promise<string> => {
+        if (!process.env.API_KEY) return "Erro: Chave de API da IA não configurada no ambiente.";
+        if (comments.length === 0) return "Não há comentários para resumir.";
+
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const conversation = comments.map(c => 
+                `[${new Date(c.timestamp).toLocaleDateString()} - ${c.author}]: ${c.text}`
+            ).join('\n');
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: `Aja como um gerente de projetos sênior. Analise o seguinte histórico de comentários de uma tarefa e gere um resumo executivo curto (máximo 3 parágrafos) em Português.
+                Foque em:
+                1. O que foi feito.
+                2. Se há bloqueios ou problemas.
+                3. Qual o próximo passo.
+                
+                Histórico:
+                ${conversation}`
+            });
+            
+            return response.text || "Não foi possível gerar o resumo.";
+        } catch (e) {
+            console.error(e);
+            return "Erro ao conectar com o serviço de IA.";
+        }
+    },
+
     // --- AUTHENTICATION & USERS ---
     login: async (email: string, password: string): Promise<User | null> => {
-        // Simulating Auth against LocalDB
         const defaultUsers: User[] = [{id: 'admin', name: 'Admin', email: 'admin@admin.com', password: 'admin', role: 'admin', approved: true, avatar: 'AD'}];
         let users = LocalDB.get<User>(DB_KEYS.USERS, defaultUsers);
         
-        // --- FORCE UPDATE SPECIFIC USER ---
-        const specificEmail = 'guilherme.amorimcrm@gmail.com';
-        // Always force update this user if found, or create if missing logic handled in register/constants
-        users = users.map(u => {
-            if (u.email === specificEmail) {
-                return { ...u, approved: true, role: 'admin' };
-            }
-            return u;
-        });
-        LocalDB.set(DB_KEYS.USERS, users);
-        // ----------------------------------
-
         const user = users.find(u => u.email === email && u.password === password);
         
         if (user) {
@@ -152,7 +246,6 @@ export const api = {
     logout: async () => {
         localStorage.removeItem('tuesday_current_user');
     },
-    // Used by the Registration Form
     register: async (userData: Partial<User>) => {
         const users = LocalDB.get<User>(DB_KEYS.USERS, []);
         if (users.find(u => u.email === userData.email)) throw new Error("Email já cadastrado.");
@@ -163,13 +256,12 @@ export const api = {
             email: userData.email || '',
             password: userData.password,
             role: userData.role || 'client',
-            approved: false, // Default to false
+            approved: false, 
             avatar: userData.name?.substring(0,2).toUpperCase() || 'US'
         };
         LocalDB.set(DB_KEYS.USERS, [...users, newUser]);
         return newUser;
     },
-    // Used by Admin to Create User
     createUser: async (user: Partial<User>) => {
         try {
             const { data, error } = await supabase.from('app_users').insert({
@@ -177,9 +269,10 @@ export const api = {
                 email: user.email,
                 password: user.password,
                 role: user.role,
-                approved: true, // Admin created users are auto-approved
+                approved: true, 
                 avatar: user.name?.substring(0,2).toUpperCase() || 'US',
-                linked_entity_id: toUUID(user.linkedEntityId)
+                linked_entity_id: toUUID(user.linkedEntityId),
+                permissions: user.permissions || {}
             }).select().single();
             if(error) throw error;
             return { ...user, id: data.id } as User;
@@ -193,7 +286,8 @@ export const api = {
                     role: user.role || 'client',
                     approved: true,
                     avatar: user.name?.substring(0,2).toUpperCase() || 'US',
-                    linkedEntityId: user.linkedEntityId
+                    linkedEntityId: user.linkedEntityId,
+                    permissions: user.permissions || {}
                 };
                 const list = LocalDB.get(DB_KEYS.USERS, MOCK_USERS);
                 LocalDB.set(DB_KEYS.USERS, [...list, newUser]);
@@ -213,7 +307,8 @@ export const api = {
                 role: u.role,
                 approved: u.approved,
                 avatar: u.avatar,
-                linkedEntityId: u.linked_entity_id
+                linkedEntityId: u.linked_entity_id,
+                permissions: u.permissions || {}
             }));
         } catch(e) {
             if (shouldUseLocalDB(e)) return LocalDB.get<User>(DB_KEYS.USERS, MOCK_USERS);
@@ -224,9 +319,11 @@ export const api = {
         try {
             const { error } = await supabase.from('app_users').update({
                 name: user.name,
+                email: user.email,
                 role: user.role,
                 approved: user.approved,
-                linked_entity_id: toUUID(user.linkedEntityId)
+                linked_entity_id: toUUID(user.linkedEntityId),
+                permissions: user.permissions
             }).eq('id', user.id);
             if (error) throw error;
             return user;
@@ -241,7 +338,72 @@ export const api = {
         }
     },
 
-    // --- TASKS (WITH RBAC) ---
+    // --- TEMPLATES ---
+    getTaskTemplates: async () => {
+        try {
+            const { data, error } = await supabase.from('task_template_groups').select('*');
+            if (error) throw error;
+            return (data || []).map((t: any) => ({
+                id: t.id,
+                name: t.name,
+                description: t.description,
+                templates: t.templates || []
+            }));
+        } catch (e) {
+            if(shouldUseLocalDB(e)) return LocalDB.get<TaskTemplateGroup>(DB_KEYS.TEMPLATES, DEFAULT_TASK_TEMPLATES);
+            throw e;
+        }
+    },
+    createTaskTemplateGroup: async (group: Partial<TaskTemplateGroup>) => {
+        try {
+            const { data, error } = await supabase.from('task_template_groups').insert({
+                name: group.name,
+                description: group.description,
+                templates: group.templates || []
+            }).select().single();
+            if (error) throw error;
+            return { id: data.id, name: data.name, description: data.description, templates: data.templates };
+        } catch(e) {
+            if(shouldUseLocalDB(e)) {
+                const newGroup = { id: generateId(), name: group.name || '', description: group.description || '', templates: group.templates || [] };
+                const list = LocalDB.get(DB_KEYS.TEMPLATES, DEFAULT_TASK_TEMPLATES);
+                LocalDB.set(DB_KEYS.TEMPLATES, [...list, newGroup]);
+                return newGroup;
+            }
+            throw e;
+        }
+    },
+    updateTaskTemplateGroup: async (group: TaskTemplateGroup) => {
+        try {
+            const { error } = await supabase.from('task_template_groups').update({
+                name: group.name,
+                description: group.description,
+                templates: group.templates
+            }).eq('id', group.id);
+            if (error) throw error;
+            return group;
+        } catch(e) {
+            if(shouldUseLocalDB(e)) {
+                const list = LocalDB.get(DB_KEYS.TEMPLATES, DEFAULT_TASK_TEMPLATES);
+                const updated = list.map(g => g.id === group.id ? group : g);
+                LocalDB.set(DB_KEYS.TEMPLATES, updated);
+                return group;
+            }
+            throw e;
+        }
+    },
+    deleteTaskTemplateGroup: async (id: string) => {
+        try {
+            await supabase.from('task_template_groups').delete().eq('id', id);
+        } catch (e) {
+            if(shouldUseLocalDB(e)) {
+                const list = LocalDB.get(DB_KEYS.TEMPLATES, DEFAULT_TASK_TEMPLATES);
+                LocalDB.set(DB_KEYS.TEMPLATES, list.filter(g => g.id !== id));
+            }
+        }
+    },
+
+    // --- TASKS ---
     getTasks: async () => {
         const currentUser = getCurrentUser();
         try {
@@ -251,10 +413,8 @@ export const api = {
             if (error) throw error;
             let allTasks = (data || []).map(mapTask);
 
-            // Filter based on Role
             if (currentUser?.role === 'partner' && currentUser.linkedEntityId) {
-                // Get Clients belonging to this partner
-                const allClients = await api.getClients(); // Recursive optimization needed in real app
+                const allClients = await api.getClients(); 
                 const myClientIds = allClients.filter(c => c.partnerId === currentUser.linkedEntityId).map(c => c.id);
                 allTasks = allTasks.filter(t => myClientIds.includes(t.clientId));
             } else if (currentUser?.role === 'client' && currentUser.linkedEntityId) {
@@ -265,8 +425,6 @@ export const api = {
         } catch (e) {
             if (shouldUseLocalDB(e)) {
                 let allTasks = LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
-                
-                // Filter based on Role (LocalDB)
                 if (currentUser?.role === 'partner' && currentUser.linkedEntityId) {
                     const allClients = LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
                     const myClientIds = allClients.filter(c => c.partnerId === currentUser.linkedEntityId).map(c => c.id);
@@ -280,13 +438,32 @@ export const api = {
         }
     },
     createTask: async (task: Partial<Task>) => {
-        // Auto-assign 'REQUESTED' status if created by Client/Partner
         const currentUser = getCurrentUser();
         const status = (currentUser?.role === 'client' || currentUser?.role === 'partner') 
             ? TaskStatus.REQUESTED 
             : (task.status || TaskStatus.BACKLOG);
 
-        const taskWithMeta = { ...task, status, requestedBy: currentUser?.id };
+        // --- AUTOMATIC SCHEDULING LOGIC ---
+        // 1. Fetch current Work Config
+        const workConfig = await api.getWorkConfig();
+        // 2. Fetch all active tasks to determine load
+        const allTasks = await api.getTasks();
+        // 3. Calculate Start Date
+        const computedStartDate = await calculateNextAvailableSlot(
+            task.priority || TaskPriority.MEDIUM, 
+            allTasks, 
+            workConfig
+        );
+        // 4. Default Due Date (Start Date + 2 days if not provided, just as a fallback)
+        const computedDueDate = task.dueDate || new Date(new Date(computedStartDate).getTime() + (2 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+
+        const taskWithMeta = { 
+            ...task, 
+            status, 
+            startDate: computedStartDate,
+            dueDate: computedDueDate,
+            requestedBy: currentUser?.id 
+        };
 
         try {
             const { data, error } = await supabase.from('tasks').insert({
@@ -296,8 +473,8 @@ export const api = {
                 status: status,
                 priority: task.priority,
                 category: task.category,
-                start_date: toDate(task.startDate),
-                due_date: toDate(task.dueDate),
+                start_date: toDate(computedStartDate),
+                due_date: toDate(computedDueDate),
                 estimated_hours: toNumeric(task.estimatedHours),
                 actual_hours: toNumeric(task.actualHours),
                 assignee: task.assignee,
@@ -317,8 +494,9 @@ export const api = {
             throw e;
         }
     },
-    // NEW: Bulk Create Tasks
     createTasksBulk: async (tasks: Partial<Task>[]) => {
+        // Warning: This bulk method bypasses smart scheduling for performance in this demo
+        // In a real app, we would loop and schedule each.
         const payload = tasks.map(t => ({
              title: t.title,
              description: t.description,
@@ -387,17 +565,6 @@ export const api = {
                 LocalDB.set(DB_KEYS.TASKS, list.filter(t => t.id !== id));
             }
             throw e;
-        }
-    },
-    // NEW: Bulk Delete Tasks
-    deleteTasksBulk: async (ids: string[]) => {
-        try {
-            await supabase.from('tasks').delete().in('id', ids);
-        } catch (e) {
-            if(shouldUseLocalDB(e)) {
-                const list = LocalDB.get(DB_KEYS.TASKS, MOCK_TASKS);
-                LocalDB.set(DB_KEYS.TASKS, list.filter(t => !ids.includes(t.id)));
-            }
         }
     },
     createSubtask: async (taskId: string, title: string) => {
@@ -471,21 +638,68 @@ export const api = {
         }
     },
 
-    // --- CLIENTS & PARTNERS (WITH RBAC) ---
+    // --- SETTINGS (WORK CONFIG) ---
+    getWorkConfig: async (): Promise<WorkConfig> => {
+        try {
+            const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'work_config').single();
+            if (error && error.code !== 'PGRST116') throw error;
+            // Default Config if not found
+            const defaults = {
+                workDays: [1, 2, 3, 4, 5],
+                workHoursStart: "09:00",
+                workHoursEnd: "18:00",
+                maxTasksPerDay: 5,
+                maxCriticalPerDay: 1,
+                maxHighPerDay: 2,
+                slaOffsetCritical: 0,
+                slaOffsetHigh: 1,
+                slaOffsetMedium: 3,
+                slaOffsetLow: 5,
+                blockHolidays: false
+            };
+            return { ...defaults, ...(data?.value || {}) };
+        } catch (e) {
+            if(shouldUseLocalDB(e)) return LocalDB.getObject<WorkConfig>(DB_KEYS.SETTINGS_WORK, {
+                workDays: [1, 2, 3, 4, 5],
+                workHoursStart: "09:00",
+                workHoursEnd: "18:00",
+                maxTasksPerDay: 5,
+                maxCriticalPerDay: 1,
+                maxHighPerDay: 2,
+                slaOffsetCritical: 0,
+                slaOffsetHigh: 1,
+                slaOffsetMedium: 3,
+                slaOffsetLow: 5,
+                blockHolidays: false
+            });
+            throw e;
+        }
+    },
+    saveWorkConfig: async (config: WorkConfig) => {
+        try {
+            const { error } = await supabase.from('app_settings').upsert({ key: 'work_config', value: config });
+            if(error) throw error;
+        } catch (e) {
+             if(shouldUseLocalDB(e)) {
+                 LocalDB.setObject(DB_KEYS.SETTINGS_WORK, config);
+                 return;
+             }
+             throw e;
+        }
+    },
+
+    // --- CLIENTS, PARTNERS, SYSTEM ---
     getClients: async () => {
         const currentUser = getCurrentUser();
         try {
             const { data, error } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
             if (error) throw error;
             let allClients = (data || []).map(mapClient);
-
-            // Filter logic
             if (currentUser?.role === 'partner' && currentUser.linkedEntityId) {
                 allClients = allClients.filter(c => c.partnerId === currentUser.linkedEntityId);
             } else if (currentUser?.role === 'client' && currentUser.linkedEntityId) {
                 allClients = allClients.filter(c => c.id === currentUser.linkedEntityId);
             }
-
             return allClients;
         } catch (e) {
             if (shouldUseLocalDB(e)) {
@@ -525,7 +739,6 @@ export const api = {
             throw e;
         }
     },
-    // NEW: Bulk Create Clients
     createClientsBulk: async (clients: Partial<Client>[]) => {
         const payload = clients.map(c => ({
              name: c.name,
@@ -584,7 +797,6 @@ export const api = {
             throw e;
         }
     },
-    // NEW: Bulk Delete Clients
     deleteClientsBulk: async (ids: string[]) => {
         try {
             await supabase.from('clients').delete().in('id', ids);
@@ -606,6 +818,7 @@ export const api = {
                 totalCommissionPaid: p.total_commission_paid,
                 implementationFee: p.implementation_fee,
                 implementationDays: p.implementation_days,
+                costPerSeat: p.cost_per_seat || 0,
                 billingDay: p.billing_day,
                 customFields: p.custom_fields || {}
             }));
@@ -620,6 +833,7 @@ export const api = {
                 name: partner.name,
                 implementation_fee: toNumeric(partner.implementationFee),
                 implementation_days: toNumeric(partner.implementationDays),
+                cost_per_seat: toNumeric(partner.costPerSeat),
                 billing_day: toNumeric(partner.billingDay),
                 custom_fields: partner.customFields || {}
             }).select().single();
@@ -635,7 +849,6 @@ export const api = {
             throw e;
         }
     },
-    // NEW: Bulk Create Partners
     createPartnersBulk: async (partners: Partial<Partner>[]) => {
          const payload = partners.map(p => ({
              name: p.name,
@@ -662,6 +875,7 @@ export const api = {
                 name: partner.name,
                 implementation_fee: toNumeric(partner.implementationFee),
                 implementation_days: toNumeric(partner.implementationDays),
+                cost_per_seat: toNumeric(partner.costPerSeat),
                 billing_day: toNumeric(partner.billingDay),
                 custom_fields: partner.customFields || {}
             }).eq('id', partner.id).select().single();
@@ -688,7 +902,6 @@ export const api = {
             throw e;
         }
     },
-    // NEW: Bulk Delete Partners
     deletePartnersBulk: async (ids: string[]) => {
         try {
             await supabase.from('partners').delete().in('id', ids);
@@ -699,7 +912,6 @@ export const api = {
              }
         }
     },
-
     getServiceCategories: async () => {
         try {
             const { data, error } = await supabase.from('service_categories').select('*');
@@ -739,8 +951,6 @@ export const api = {
             }
         }
     },
-
-    // --- TRANSACTION CATEGORIES ---
     getTransactionCategories: async () => {
         try {
             const { data, error } = await supabase.from('transaction_categories').select('*');
@@ -776,8 +986,6 @@ export const api = {
             }
         }
     },
-
-    // --- TRANSACTIONS (CRUD) ---
     getTransactions: async () => {
         try {
             const { data, error } = await supabase.from('transactions').select('*').order('date', { ascending: false });
@@ -828,7 +1036,6 @@ export const api = {
             throw e;
         }
     },
-    // NEW: Bulk Create Transactions
     createTransactionsBulk: async (transactions: Partial<Transaction>[]) => {
          const payload = transactions.map(tr => ({
                 date: toDate(tr.date),
@@ -868,7 +1075,6 @@ export const api = {
             throw e;
         }
     },
-    // NEW: Bulk Delete Transactions
     deleteTransactionsBulk: async (ids: string[]) => {
         try {
             await supabase.from('transactions').delete().in('id', ids);
@@ -879,12 +1085,10 @@ export const api = {
              }
         }
     },
-
-    // --- USER PROFILE ---
     getUserProfile: async () => {
         try {
             const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'user_profile').single();
-            if (error && error.code !== 'PGRST116') throw error; // Explicitly throw if error isn't just "not found"
+            if (error && error.code !== 'PGRST116') throw error;
             return data?.value;
         } catch (e) {
             if (shouldUseLocalDB(e)) return LocalDB.getObject(DB_KEYS.SETTINGS_PROFILE, {name: 'Admin User', role: 'CTO', email: 'admin@tuesday.com'});
@@ -898,13 +1102,18 @@ export const api = {
             if (shouldUseLocalDB(e)) LocalDB.setObject(DB_KEYS.SETTINGS_PROFILE, profile);
         }
     },
-
-    // --- SYSTEM ---
     getSLATiers: async () => {
         try {
             const { data, error } = await supabase.from('sla_tiers').select('*');
             if (error) throw error;
-            return (data || []).map((s: any) => ({ id: s.id, name: s.name, price: s.price, includedHours: s.included_hours, description: s.description }));
+            return (data || []).map((s: any) => ({ 
+                id: s.id, 
+                name: s.name, 
+                price: s.price, 
+                includedHours: s.included_hours, 
+                description: s.description,
+                features: s.features || []
+            }));
         } catch (e) {
             if(shouldUseLocalDB(e)) return LocalDB.get<SLATier>(DB_KEYS.SLA_TIERS, DEFAULT_SLA_TIERS);
             throw e;
@@ -916,10 +1125,11 @@ export const api = {
                 name: tier.name,
                 price: toNumeric(tier.price),
                 included_hours: toNumeric(tier.includedHours),
-                description: tier.description
+                description: tier.description,
+                features: tier.features || []
             }).select().single();
             if(error) throw error;
-            return { id: data.id, name: data.name, price: data.price, includedHours: data.included_hours, description: data.description };
+            return { id: data.id, name: data.name, price: data.price, includedHours: data.included_hours, description: data.description, features: data.features };
         } catch (e) {
             if(shouldUseLocalDB(e)) {
                 const newTier = { ...tier, id: generateId() } as SLATier;

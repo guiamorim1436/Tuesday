@@ -31,7 +31,8 @@ export interface Partner {
   totalCommissionPaid: number;
   implementationFee: number;
   implementationDays: number;
-  billingDay?: number; // New Field
+  costPerSeat?: number; // New: Monthly cost partner pays per active client
+  billingDay?: number;
   customFields?: Record<string, any>;
 }
 
@@ -44,7 +45,7 @@ export interface Client {
   onboardingDate: string;
   healthScore: number;
   hoursUsedMonth: number;
-  billingDay?: number; // New Field
+  billingDay?: number;
   customFields?: Record<string, any>;
 }
 
@@ -143,20 +144,39 @@ export interface SLATier {
   price: number;
   includedHours: number;
   description?: string;
+  features?: string[]; // New: List of included features
 }
 
 export interface WorkConfig {
-  workDays: number[];
-  workHoursStart: string;
-  workHoursEnd: string;
+  workDays: number[]; // 0=Sun, 1=Mon, etc.
+  workHoursStart: string; // "09:00"
+  workHoursEnd: string; // "18:00"
+  
+  // Capacity Limits
   maxTasksPerDay: number;
-  maxEmergencyPerDay: number;
-  taskStatuses?: string[]; // Custom statuses configuration
+  maxCriticalPerDay: number;
+  maxHighPerDay: number;
+
+  // SLA Automation Rules (Days to start)
+  slaOffsetCritical: number; // usually 0
+  slaOffsetHigh: number; // usually 1
+  slaOffsetMedium: number; // usually 3
+  slaOffsetLow: number; // usually 5
+  
+  blockHolidays?: boolean; // New: Block holidays logic
+  taskStatuses?: string[]; 
 }
 
 // --- SETTINGS & AUTH ---
 
 export type UserRole = 'admin' | 'partner' | 'client' | 'pending';
+
+export interface UserPermissions {
+  canDelete?: boolean;
+  viewFinance?: boolean;
+  manageUsers?: boolean;
+  [key: string]: boolean | undefined;
+}
 
 export interface User {
   id: string;
@@ -167,6 +187,7 @@ export interface User {
   approved: boolean; 
   linkedEntityId?: string; 
   avatar: string;
+  permissions?: UserPermissions;
 }
 
 export interface CompanySettings {

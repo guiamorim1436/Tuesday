@@ -43,7 +43,13 @@ export const DEFAULT_WORK_CONFIG: WorkConfig = {
   workHoursStart: "09:00",
   workHoursEnd: "18:00",
   maxTasksPerDay: 4,
-  maxEmergencyPerDay: 1
+  maxCriticalPerDay: 1,
+  maxHighPerDay: 2,
+  slaOffsetCritical: 0,
+  slaOffsetHigh: 1,
+  slaOffsetMedium: 3,
+  slaOffsetLow: 5,
+  blockHolidays: false
 };
 
 // Default Task Templates

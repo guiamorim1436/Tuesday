@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react';
+import { Mail, Lock, User, Loader2, ArrowRight, ShieldAlert } from 'lucide-react';
 import { api } from '../services/api';
 
 interface AuthProps {
@@ -41,23 +41,38 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         }
     };
 
+    const handleBypass = async () => {
+        setIsLoading(true);
+        setTimeout(async () => {
+            try {
+                const user = await api.login('admin@admin.com', 'admin'); 
+                if (user) onLogin(user);
+            } catch (e) {
+                setError("Falha no bypass.");
+                setIsLoading(false);
+            }
+        }, 800);
+    };
+
     return (
-        <div className="min-h-screen flex w-full bg-white overflow-hidden font-sans">
-            {/* Left Side - Visual Identity */}
-            <div className="hidden lg:flex w-1/2 relative bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600 items-center justify-center p-12 overflow-hidden">
+        <div className="min-h-screen flex w-full bg-[#F3F4F6] overflow-hidden font-sans">
+            {/* Background Effects */}
+            <div className="absolute inset-0 z-0 bg-gradient-to-br from-indigo-100 via-slate-50 to-blue-100 opacity-80 pointer-events-none"></div>
+
+            {/* Left Side - Visual Identity (Restored Vibrant Brand Colors) */}
+            <div className="hidden lg:flex w-1/2 relative bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700 items-center justify-center p-12 overflow-hidden z-10">
                 {/* Decorative background shapes */}
-                <div className="absolute top-0 left-0 w-full h-full opacity-10">
+                <div className="absolute top-0 left-0 w-full h-full opacity-20">
                     <div className="absolute top-10 left-10 w-64 h-64 rounded-full bg-white blur-3xl mix-blend-overlay"></div>
                     <div className="absolute bottom-10 right-10 w-96 h-96 rounded-full bg-teal-300 blur-3xl mix-blend-overlay"></div>
                 </div>
 
                 <div className="relative z-10 text-center text-white max-w-lg">
                     <div className="mb-8 flex justify-center">
-                        {/* Logo Container - Expects logo.png in public folder, falls back to text/icon if missing */}
                         <img 
                             src="/logo.png" 
                             alt="Tuesday Logo" 
-                            className="h-32 object-contain drop-shadow-lg"
+                            className="h-32 object-contain drop-shadow-2xl"
                             onError={(e) => {
                                 e.currentTarget.style.display = 'none';
                                 const fallback = document.getElementById('logo-fallback');
@@ -65,36 +80,36 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                             }}
                         />
                         <div id="logo-fallback" className="hidden flex-col items-center">
-                            <div className="text-6xl font-bold tracking-tighter mb-2">Tuesday</div>
+                            <div className="text-6xl font-bold tracking-tighter mb-2 text-white">Tuesday</div>
                             <div className="w-16 h-1 bg-white/50 rounded-full"></div>
                         </div>
                     </div>
                     
                     <h1 className="text-4xl font-bold mb-4 tracking-tight">Gestão Inteligente para Agências</h1>
-                    <p className="text-lg text-blue-100 leading-relaxed">
+                    <p className="text-lg text-blue-100 leading-relaxed font-medium">
                         Centralize operações, financeiro e relacionamento em uma única plataforma escalável.
                     </p>
                 </div>
                 
-                <div className="absolute bottom-8 text-blue-200 text-xs tracking-wider font-medium">
-                    POWERED BY TENNO HUB
+                <div className="absolute bottom-8 text-blue-200 text-xs tracking-[0.2em] font-medium uppercase">
+                    Powered by Tenno HUB
                 </div>
             </div>
 
             {/* Right Side - Form */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-slate-50 lg:bg-white">
-                <div className="w-full max-w-md space-y-8">
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-8 relative z-10">
+                <div className="w-full max-w-md space-y-8 bg-white/70 backdrop-blur-xl p-10 rounded-3xl shadow-xl border border-white/60">
                     <div className="text-center lg:text-left">
                         <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
                             {isLogin ? 'Acessar Plataforma' : 'Criar nova conta'}
                         </h2>
-                        <p className="mt-2 text-sm text-slate-500">
+                        <p className="mt-2 text-sm text-slate-600 font-medium">
                             {isLogin ? 'Entre com suas credenciais para continuar.' : 'Preencha os dados abaixo para solicitar acesso.'}
                         </p>
                     </div>
 
                     {error && (
-                        <div className="p-4 rounded-lg bg-rose-50 border border-rose-100 text-rose-600 text-sm font-medium animate-in fade-in slide-in-from-top-2">
+                        <div className="p-4 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 text-sm font-medium animate-in fade-in slide-in-from-top-2">
                             {error}
                         </div>
                     )}
@@ -102,7 +117,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {!isLogin && (
                             <div className="space-y-1">
-                                <label className="block text-sm font-medium text-slate-700">Nome Completo</label>
+                                <label className="block text-sm font-semibold text-slate-700">Nome Completo</label>
                                 <div className="relative group">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
                                         <User size={18} />
@@ -110,7 +125,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                                     <input 
                                         required 
                                         type="text" 
-                                        className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all" 
+                                        className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-white/50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all font-medium" 
                                         placeholder="Seu Nome" 
                                         value={name} 
                                         onChange={e => setName(e.target.value)}
@@ -120,7 +135,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         )}
                         
                         <div className="space-y-1">
-                            <label className="block text-sm font-medium text-slate-700">Email Corporativo</label>
+                            <label className="block text-sm font-semibold text-slate-700">Email Corporativo</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
                                     <Mail size={18} />
@@ -128,7 +143,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                                 <input 
                                     required 
                                     type="email" 
-                                    className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all" 
+                                    className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-white/50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all font-medium" 
                                     placeholder="nome@empresa.com" 
                                     value={email} 
                                     onChange={e => setEmail(e.target.value)}
@@ -138,8 +153,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
                         <div className="space-y-1">
                             <div className="flex justify-between items-center">
-                                <label className="block text-sm font-medium text-slate-700">Senha</label>
-                                {isLogin && <a href="#" className="text-xs font-medium text-indigo-600 hover:text-indigo-500">Esqueceu?</a>}
+                                <label className="block text-sm font-semibold text-slate-700">Senha</label>
+                                {isLogin && <a href="#" className="text-xs font-semibold text-indigo-600 hover:text-indigo-500">Esqueceu?</a>}
                             </div>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
@@ -148,7 +163,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                                 <input 
                                     required 
                                     type="password" 
-                                    className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all" 
+                                    className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-white/50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all font-medium" 
                                     placeholder="••••••••" 
                                     value={password} 
                                     onChange={e => setPassword(e.target.value)}
@@ -158,9 +173,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
                         {!isLogin && (
                             <div className="space-y-1">
-                                <label className="block text-sm font-medium text-slate-700">Perfil de Acesso</label>
+                                <label className="block text-sm font-semibold text-slate-700">Perfil de Acesso</label>
                                 <div className="relative">
-                                    <select value={role} onChange={e => setRole(e.target.value)} className="block w-full pl-3 pr-10 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all appearance-none">
+                                    <select value={role} onChange={e => setRole(e.target.value)} className="block w-full pl-3 pr-10 py-3 border border-slate-200 rounded-xl leading-5 bg-white/50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all appearance-none font-medium cursor-pointer">
                                         <option value="client">Sou Cliente</option>
                                         <option value="partner">Sou Parceiro</option>
                                     </select>
@@ -174,7 +189,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         <button 
                             type="submit" 
                             disabled={isLoading} 
-                            className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform hover:scale-[1.01] active:scale-[0.99]"
+                            className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg shadow-indigo-500/30 text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform hover:scale-[1.02] active:scale-[0.99]"
                         >
                             {isLoading ? <Loader2 className="animate-spin" /> : (isLogin ? 'Entrar na Plataforma' : 'Criar Conta')}
                         </button>
@@ -186,17 +201,28 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                                 <div className="w-full border-t border-slate-200"></div>
                             </div>
                             <div className="relative flex justify-center text-sm">
-                                <span className="px-2 bg-slate-50 lg:bg-white text-slate-500">Ou</span>
+                                <span className="px-2 bg-white/50 backdrop-blur-md rounded text-slate-500">Ou</span>
                             </div>
                         </div>
 
-                        <div className="mt-6 flex justify-center">
+                        <div className="mt-6 flex justify-center flex-col items-center space-y-4">
                             <button 
                                 onClick={() => setIsLogin(!isLogin)} 
-                                className="text-sm font-medium text-indigo-600 hover:text-indigo-500 flex items-center transition-colors"
+                                className="text-sm font-semibold text-indigo-600 hover:text-indigo-500 flex items-center transition-colors"
                             >
                                 {isLogin ? 'Criar uma nova conta' : 'Já possui uma conta? Entrar'} <ArrowRight size={14} className="ml-1"/>
                             </button>
+
+                            {/* Bypass Button for Testing */}
+                            {isLogin && (
+                                <button 
+                                    onClick={handleBypass}
+                                    type="button"
+                                    className="text-xs font-mono text-emerald-600 hover:underline flex items-center opacity-70 hover:opacity-100 transition-opacity mt-4 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100 shadow-sm"
+                                >
+                                    <ShieldAlert size={12} className="mr-1.5"/> Modo Admin (Bypass)
+                                </button>
+                            )}
                         </div>
                     </div>
                     
