@@ -5,10 +5,14 @@ import { TaskBoard } from './components/TaskBoard';
 import { ClientManager } from './components/ClientManager';
 import { FinanceModule } from './components/FinanceModule';
 import { SettingsModule } from './components/SettingsModule';
+import { ProposalsModule } from './components/ProposalsModule';
+import { CRMModule } from './components/CRMModule';
+import { SLAModule } from './components/SLAModule';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
-type View = 'dashboard' | 'tasks' | 'clients' | 'finance' | 'settings';
+type View = 'dashboard' | 'tasks' | 'clients' | 'finance' | 'settings' | 'proposals' | 'crm' | 'sla';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
 
   const renderContent = () => {
@@ -18,6 +22,9 @@ const App: React.FC = () => {
       case 'clients': return <ClientManager />;
       case 'finance': return <FinanceModule />;
       case 'settings': return <SettingsModule />;
+      case 'proposals': return <ProposalsModule />;
+      case 'crm': return <CRMModule />;
+      case 'sla': return <SLAModule />;
       default: return <Dashboard />;
     }
   };
@@ -53,11 +60,14 @@ const App: React.FC = () => {
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-4">Gestão</div>
           <NavItem view="dashboard" icon={LayoutDashboard} label="Visão Executiva" />
-          <NavItem view="clients" icon={Users} label="Clientes e Parceiros" />
+          <NavItem view="crm" icon={Users} label="CRM & Vendas" />
+          <NavItem view="clients" icon={CheckSquare} label="Clientes & Parceiros" />
           <NavItem view="finance" icon={PieChart} label="Fluxo de Caixa" />
           
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-8 mb-4 px-4">Operação</div>
-          <NavItem view="tasks" icon={CheckSquare} label="Central de Tarefas" />
+          <NavItem view="tasks" icon={Layers} label="Central de Tarefas" />
+          <NavItem view="proposals" icon={LayoutDashboard} label="Propostas" />
+          <NavItem view="sla" icon={PieChart} label="Controle de SLA" />
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -85,6 +95,14 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   );
 };
 

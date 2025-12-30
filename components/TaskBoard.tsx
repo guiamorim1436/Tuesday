@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Filter, Plus, Clock, X, Calendar as CalendarIcon, AlignLeft, CheckCircle2, Play, Pause, Send, Trash2, Layout, List, BarChart2, Paperclip, Sparkles, UserPlus, CheckSquare, Search, Loader2 } from 'lucide-react';
 import { TaskStatus, TaskPriority, Task, Comment, ServiceCategory, WorkConfig, CustomFieldDefinition, Subtask, Client } from '../types';
@@ -63,8 +64,8 @@ export const TaskBoard: React.FC = () => {
           setClients(c);
           setCategories(cats);
           setCustomFieldsConfig(cfs);
-      } catch (e) {
-          console.error("Failed to load task board", e);
+      } catch (e: any) {
+          console.error("Failed to load task board", e?.message || e);
       } finally {
           setIsLoading(false);
       }

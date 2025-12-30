@@ -1,8 +1,157 @@
+
 import React, { useState, useEffect } from 'react';
-import { User, Shield, Bell, Key, CreditCard, Building, Save, Briefcase, CheckSquare, Plus, Trash2, Edit2, X, List, DollarSign, Clock, CalendarClock, Zap, Lock, Mail, Globe, Phone, MapPin, Copy, RefreshCw, CheckCircle, Database, LayoutTemplate, Loader2 } from 'lucide-react';
+import { User, Shield, Bell, Key, CreditCard, Building, Save, Briefcase, CheckSquare, Plus, Trash2, Edit2, X, List, DollarSign, Clock, CalendarClock, Zap, Lock, Mail, Globe, Phone, MapPin, Copy, RefreshCw, CheckCircle, Database, LayoutTemplate, Loader2, Code, Terminal, AlertTriangle, Cloud, CloudOff } from 'lucide-react';
 import { ServiceCategory, SLATier, WorkConfig, User as UserType, CompanySettings, CustomFieldDefinition, TaskTemplateGroup, TaskTemplate, EntityType, TaskPriority } from '../types';
 import { DEFAULT_WORK_CONFIG, MOCK_USERS } from '../constants';
 import { api } from '../services/api';
+import { supabase, isConfigured } from '../lib/supabaseClient';
+
+const SQL_SCHEMA = `-- Copie e cole este SQL no Editor do Supabase
+
+-- 1. Tabelas de Configuração Auxiliares
+CREATE TABLE IF NOT EXISTS public.sla_tiers (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  price NUMERIC DEFAULT 0,
+  included_hours NUMERIC DEFAULT 0,
+  description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS public.service_categories (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  is_billable BOOLEAN DEFAULT true
+);
+
+CREATE TABLE IF NOT EXISTS public.custom_field_definitions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  entity TEXT NOT NULL, -- 'client', 'partner', 'task', 'transaction'
+  key TEXT NOT NULL,
+  label TEXT NOT NULL,
+  type TEXT NOT NULL, -- 'text', 'number', 'select', 'date'
+  options JSONB
+);
+
+CREATE TABLE IF NOT EXISTS public.task_template_groups (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  templates JSONB -- Armazena array de templates
+);
+
+CREATE TABLE IF NOT EXISTS public.app_settings (
+    key TEXT PRIMARY KEY,
+    value JSONB
+);
+
+-- 2. Entidades Principais
+CREATE TABLE IF NOT EXISTS public.partners (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  total_referrals INTEGER DEFAULT 0,
+  total_commission_paid NUMERIC DEFAULT 0,
+  implementation_fee NUMERIC DEFAULT 0,
+  implementation_days INTEGER DEFAULT 0,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.clients (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT DEFAULT 'Ativo',
+  sla_tier_id UUID REFERENCES public.sla_tiers(id) ON DELETE SET NULL,
+  partner_id UUID REFERENCES public.partners(id) ON DELETE SET NULL,
+  onboarding_date DATE,
+  health_score INTEGER DEFAULT 100,
+  hours_used_month NUMERIC DEFAULT 0,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.tasks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  client_id UUID REFERENCES public.clients(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'Backlog',
+  priority TEXT DEFAULT 'Média',
+  category TEXT,
+  start_date DATE,
+  due_date DATE,
+  estimated_hours NUMERIC DEFAULT 0,
+  actual_hours NUMERIC DEFAULT 0,
+  is_tracking_time BOOLEAN DEFAULT false,
+  last_time_log_start BIGINT,
+  assignee TEXT,
+  participants TEXT[],
+  watchers TEXT[],
+  custom_fields JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.subtasks (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    task_id UUID REFERENCES public.tasks(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    completed BOOLEAN DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS public.comments (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    task_id UUID REFERENCES public.tasks(id) ON DELETE CASCADE,
+    author TEXT,
+    text TEXT,
+    avatar TEXT,
+    type TEXT DEFAULT 'text',
+    attachment_name TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.transactions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  date DATE NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT,
+  amount NUMERIC DEFAULT 0,
+  type TEXT CHECK (type IN ('income', 'expense')),
+  status TEXT CHECK (status IN ('paid', 'pending')),
+  frequency TEXT DEFAULT 'single',
+  installments INTEGER,
+  client_id UUID REFERENCES public.clients(id) ON DELETE SET NULL,
+  partner_id UUID REFERENCES public.partners(id) ON DELETE SET NULL,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3. Habilitar RLS (Segurança básica para início)
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+
+-- Política Aberta (Apenas para demonstração/dev - Em prod restrinja por user_id)
+CREATE POLICY "Public Access" ON public.clients FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.partners FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.tasks FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.transactions FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.subtasks FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.comments FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.sla_tiers FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.service_categories FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.custom_field_definitions FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.task_template_groups FOR ALL USING (true);
+CREATE POLICY "Public Access" ON public.app_settings FOR ALL USING (true);
+
+-- Dados Iniciais (Seed)
+INSERT INTO public.sla_tiers (name, price, included_hours, description) VALUES
+('Start', 1500, 10, 'Suporte básico'),
+('Growth', 3500, 30, 'Evolução contínua'),
+('Enterprise', 8000, 80, 'Squad dedicado');
+
+INSERT INTO public.service_categories (name, is_billable) VALUES
+('Automacao', true), ('CRM', true), ('Financeiro', false), ('Suporte', false);
+`;
 
 export const SettingsModule: React.FC = () => {
   const [activeSection, setActiveSection] = useState('rules');
@@ -40,9 +189,22 @@ export const SettingsModule: React.FC = () => {
   const [users, setUsers] = useState<UserType[]>(MOCK_USERS);
   const [inviteEmail, setInviteEmail] = useState('');
 
+  // Database Connection State
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'offline' | 'error'>('checking');
+  const [supaUrl, setSupaUrl] = useState('');
+  const [supaKey, setSupaKey] = useState('');
+
   // Load All Settings
   useEffect(() => {
     loadSettings();
+    checkDbConnection();
+    
+    // Load stored creds into input fields
+    const storedUrl = localStorage.getItem('tuesday_supabase_url');
+    const storedKey = localStorage.getItem('tuesday_supabase_key');
+    if(storedUrl) setSupaUrl(storedUrl);
+    if(storedKey) setSupaKey(storedKey);
+
   }, []);
 
   const loadSettings = async () => {
@@ -62,14 +224,70 @@ export const SettingsModule: React.FC = () => {
           setWorkConfig(wConfig);
           setCompanySettings(cSettings);
           setTaskGroups(tGroups);
-      } catch (e) {
-          console.error("Failed to load settings", e);
+      } catch (e: any) {
+          console.error("Failed to load settings", e?.message || e);
       } finally {
           setIsLoading(false);
       }
   };
 
+  const checkDbConnection = async () => {
+      setDbStatus('checking');
+      if (!isConfigured) {
+          setDbStatus('offline');
+          return;
+      }
+      try {
+          // Check for existence of settings table as a ping
+          const { error, count } = await supabase.from('app_settings').select('*', { count: 'exact', head: true });
+          
+          if (error) {
+              if (error.code === 'PGRST116') { // Result contains 0 rows is fine
+                  setDbStatus('connected');
+              } else if (error.code === '42P01') { // Undefined Table -> Connected but schema missing
+                  setDbStatus('connected'); // Technically connected, just empty
+              } else {
+                  console.error("DB Check Error:", error.message);
+                  setDbStatus('error');
+              }
+          } else {
+              setDbStatus('connected');
+          }
+      } catch (e: any) {
+          console.error("DB Check Exception:", e?.message || e);
+          setDbStatus('error');
+      }
+  };
+
+  const handleSaveCredentials = () => {
+      if(!supaUrl || !supaKey) return alert('Preencha ambos os campos.');
+      
+      // SECURITY CHECK
+      if (supaKey.trim().startsWith('sb_secret') || supaKey.includes('service_role')) {
+          alert('⛔ ERRO DE SEGURANÇA:\n\nVocê inseriu uma chave SECRETA (service_role/sb_secret).\nEsta chave dá acesso total ao banco e NÃO deve ser usada no navegador.\n\nPor favor, utilize a chave "ANON" / "PUBLIC" (sb_publishable) disponível no painel do Supabase.');
+          return;
+      }
+
+      localStorage.setItem('tuesday_supabase_url', supaUrl.trim());
+      localStorage.setItem('tuesday_supabase_key', supaKey.trim());
+      
+      alert('Credenciais salvas! A página será recarregada para aplicar.');
+      window.location.reload();
+  };
+
+  const handleClearCredentials = () => {
+      localStorage.removeItem('tuesday_supabase_url');
+      localStorage.removeItem('tuesday_supabase_key');
+      setSupaUrl('');
+      setSupaKey('');
+      window.location.reload();
+  };
+
   // --- Handlers ---
+  const handleCopySQL = () => {
+      navigator.clipboard.writeText(SQL_SCHEMA);
+      alert('SQL copiado para a área de transferência!');
+  };
 
   // Custom Fields
   const handleAddCF = async () => {
@@ -247,7 +465,7 @@ export const SettingsModule: React.FC = () => {
     { id: 'company', label: 'Dados da Empresa', icon: Building },
     { id: 'security', label: 'Usuários e Permissões', icon: Shield },
     { id: 'notifications', label: 'Notificações', icon: Bell },
-    { id: 'integrations', label: 'Integrações e API', icon: Key },
+    { id: 'database', label: 'Banco de Dados', icon: Terminal },
   ];
 
   const weekDays = [
@@ -291,6 +509,97 @@ export const SettingsModule: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-10">
         <div className="max-w-4xl">
           
+          {activeSection === 'database' && (
+              <div className="animate-in fade-in duration-300">
+                  <h3 className="text-2xl font-bold text-slate-800 mb-6">Instalação do Banco de Dados</h3>
+                  
+                  {/* Connection Status Card */}
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 mb-6">
+                      <div className="flex items-center justify-between mb-6">
+                          <div>
+                              <h4 className="text-lg font-bold text-slate-800">Status da Conexão</h4>
+                              <p className="text-sm text-slate-500">Status atual do cliente Supabase</p>
+                          </div>
+                          <div className={`px-4 py-2 rounded-full flex items-center font-bold text-sm ${
+                              dbStatus === 'connected' ? 'bg-emerald-100 text-emerald-700' :
+                              dbStatus === 'error' ? 'bg-rose-100 text-rose-700' :
+                              dbStatus === 'offline' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                              {dbStatus === 'connected' && <><CheckCircle size={16} className="mr-2"/> Conectado (Cloud)</>}
+                              {dbStatus === 'error' && <><AlertTriangle size={16} className="mr-2"/> Erro de Conexão</>}
+                              {dbStatus === 'offline' && <><CloudOff size={16} className="mr-2"/> Modo Offline (Local)</>}
+                              {dbStatus === 'checking' && <><Loader2 size={16} className="mr-2 animate-spin"/> Verificando...</>}
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project URL</label>
+                              <input 
+                                className="w-full border rounded px-3 py-2 text-sm bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono" 
+                                placeholder="https://your-project.supabase.co"
+                                value={supaUrl}
+                                onChange={e => setSupaUrl(e.target.value)}
+                              />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Anon Public Key</label>
+                              <div className="relative">
+                                <Key size={16} className="absolute left-3 top-2.5 text-slate-400"/>
+                                <input 
+                                    className="w-full border rounded pl-9 pr-3 py-2 text-sm bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono" 
+                                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                    value={supaKey}
+                                    onChange={e => setSupaKey(e.target.value)}
+                                    type="password"
+                                />
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-1">Nunca utilize a chave "service_role" ou "secret" aqui.</p>
+                          </div>
+                          <div className="flex justify-end space-x-3">
+                              {/* Only show clear if there is data */}
+                              {(localStorage.getItem('tuesday_supabase_url')) && (
+                                  <button onClick={handleClearCredentials} className="px-4 py-2 text-rose-600 text-sm font-medium hover:bg-rose-50 rounded-lg transition-colors">
+                                      Desconectar
+                                  </button>
+                              )}
+                              <button onClick={handleSaveCredentials} className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center">
+                                  <RefreshCw size={16} className="mr-2"/>
+                                  Salvar e Conectar
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-6">
+                      <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-start space-x-3">
+                          <Terminal className="text-blue-600 mt-1 flex-shrink-0" size={20} />
+                          <div>
+                              <h4 className="font-bold text-blue-900 text-sm">Instalação do Schema</h4>
+                              <p className="text-sm text-blue-700 mt-1">
+                                  Para ativar a persistência na nuvem, crie um projeto no Supabase e execute o script abaixo no SQL Editor.
+                              </p>
+                          </div>
+                      </div>
+
+                      <div className="relative">
+                          <div className="absolute top-4 right-4 z-10">
+                              <button 
+                                onClick={handleCopySQL}
+                                className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded-md hover:bg-slate-700 flex items-center shadow-lg"
+                              >
+                                  <Copy size={14} className="mr-1.5" /> Copiar SQL
+                              </button>
+                          </div>
+                          <pre className="bg-slate-900 text-slate-300 p-6 rounded-xl overflow-x-auto text-xs font-mono leading-relaxed border border-slate-800 h-[300px]">
+                              {SQL_SCHEMA}
+                          </pre>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* ... Rest of the component code stays the same ... */}
           {activeSection === 'custom_fields' && (
               <div className="animate-in fade-in duration-300">
                   <h3 className="text-2xl font-bold text-slate-800 mb-6">Campos Personalizados</h3>
@@ -691,7 +1000,7 @@ export const SettingsModule: React.FC = () => {
                               <label className="block text-sm font-bold text-slate-700 mb-1">Razão Social / Nome Fantasia</label>
                               <div className="flex">
                                   <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-slate-300 bg-slate-50 text-slate-500"><Building size={16}/></span>
-                                  <input className="flex-1 border rounded-r-md px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500" value={companySettings.name} onChange={e => setCompanySettings({...companySettings, name: e.target.value})} />
+                                  <input className="flex-1 border rounded-r-md px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500" value={companySettings.name} onChange={e => setCompanySettings({...companySettings,name: e.target.value})} />
                               </div>
                           </div>
                           <div>

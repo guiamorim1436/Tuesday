@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Search, CheckCircle, XCircle, PauseCircle, Clock, Building2, Wallet, Plus, Edit2, Trash2, X, Save, DollarSign, Rocket, ShieldCheck, Zap, Layers, Filter, Loader2 } from 'lucide-react';
 import { ClientStatus, Client, Partner, ServiceCategory, SLATier, CustomFieldDefinition, TaskTemplateGroup, Task, TaskStatus } from '../types';
@@ -52,8 +53,8 @@ export const ClientManager: React.FC = () => {
           setCategories(cats);
           setSlaTiers(slas);
           setCustomFields(cfs);
-      } catch (e) {
-          console.error("Failed to load data", e);
+      } catch (e: any) {
+          console.error("Failed to load data", e?.message || e);
       } finally {
           setIsLoading(false);
       }
