@@ -1,6 +1,8 @@
+
 // Domain Entities
 
 export enum TaskStatus {
+  REQUESTED = 'Solicitado', // New status for portal requests
   BACKLOG = 'Backlog',
   IN_PROGRESS = 'Em Execução',
   WAITING = 'Aguardando',
@@ -18,18 +20,16 @@ export enum ClientStatus {
   ACTIVE = 'Ativo',
   PAUSED = 'Pausado',
   CHURNED = 'Encerrado',
-  ONBOARDING = 'Onboarding' // Used effectively as Implementation phase
+  ONBOARDING = 'Onboarding'
 }
 
 export interface Partner {
   id: string;
   name: string;
-  // Commission Rate removed
   totalReferrals: number;
   totalCommissionPaid: number;
-  // Implementation Negotiation Fields
-  implementationFee: number; // Fixed value for implementation per client
-  implementationDays: number; // Agreed duration for implementation
+  implementationFee: number;
+  implementationDays: number;
   customFields?: Record<string, any>;
 }
 
@@ -37,10 +37,10 @@ export interface Client {
   id: string;
   name: string;
   status: ClientStatus;
-  slaTierId: string; // Reference to SLATier config
-  partnerId?: string; // Link to Partner
-  onboardingDate: string; // Start of Implementation
-  healthScore: number; // 0 to 100
+  slaTierId: string;
+  partnerId?: string;
+  onboardingDate: string;
+  healthScore: number;
   hoursUsedMonth: number;
   customFields?: Record<string, any>;
 }
@@ -53,8 +53,8 @@ export interface Comment {
   avatar?: string;
   type?: 'text' | 'audio' | 'file';
   attachmentName?: string;
-  attachmentUrl?: string; // Mock URL
-  duration?: string; // For audio "0:15"
+  attachmentUrl?: string;
+  duration?: string;
 }
 
 export interface Subtask {
@@ -71,25 +71,26 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   
-  startDate: string; // Manual Start Date
+  startDate: string;
   dueDate: string;
-  createdAt: string; // System Record
+  createdAt: string;
   
   estimatedHours: number;
   actualHours: number;
   
-  // People
-  assignee: string; // Owner
-  participants: string[]; // Actionable users
-  watchers: string[]; // Observers
+  assignee: string;
+  participants: string[];
+  watchers: string[];
 
   category: string; 
   
-  subtasks: Subtask[]; // New Subtasks support
+  subtasks: Subtask[];
   comments: Comment[];
   customFields: Record<string, string | number | boolean>;
   isTrackingTime?: boolean;
   lastTimeLogStart?: number; 
+  
+  requestedBy?: string; // ID of the user who requested
 }
 
 export interface FinanceMetric {
@@ -110,7 +111,7 @@ export interface Transaction {
   type: 'income' | 'expense';
   status: 'paid' | 'pending';
   frequency: TransactionFrequency;
-  installments?: number; // Total installments if recurring
+  installments?: number;
   clientId?: string;
   partnerId?: string;
   customFields?: Record<string, any>;
@@ -133,7 +134,6 @@ export interface ServiceCategory {
   isBillable: boolean;
 }
 
-// New Configurable SLA Tier
 export interface SLATier {
   id: string;
   name: string;
@@ -142,16 +142,28 @@ export interface SLATier {
   description?: string;
 }
 
-// Capacity and Work Rules Config
 export interface WorkConfig {
-  workDays: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
-  workHoursStart: string; // "09:00"
-  workHoursEnd: string; // "18:00"
+  workDays: number[];
+  workHoursStart: string;
+  workHoursEnd: string;
   maxTasksPerDay: number;
   maxEmergencyPerDay: number;
 }
 
-// --- SETTINGS ---
+// --- SETTINGS & AUTH ---
+
+export type UserRole = 'admin' | 'partner' | 'client' | 'pending';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  password?: string; // Mock only
+  role: UserRole;
+  approved: boolean; // Admin must approve
+  linkedEntityId?: string; // ID of Client or Partner company
+  avatar: string;
+}
 
 export interface CompanySettings {
   name: string;
@@ -160,15 +172,6 @@ export interface CompanySettings {
   phone: string;
   address: string;
   website: string;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'manager' | 'operator';
-  active: boolean;
-  avatar: string;
 }
 
 // --- TASK TEMPLATES ---
@@ -180,7 +183,7 @@ export interface TaskTemplate {
   category: string;
   estimatedHours: number;
   priority: TaskPriority;
-  daysOffset: number; // Days after trigger to set due date
+  daysOffset: number;
 }
 
 export interface TaskTemplateGroup {
@@ -200,7 +203,7 @@ export interface CatalogItem {
   type: 'service' | 'product';
   description?: string;
   defaultPrice: number;
-  defaultHours?: number; // Only for services
+  defaultHours?: number;
 }
 
 export interface ProposalItem {
@@ -210,7 +213,7 @@ export interface ProposalItem {
   type: 'service' | 'product';
   quantity: number;
   unitPrice: number;
-  hours?: number; // Only for services
+  hours?: number;
   total: number;
 }
 
@@ -225,7 +228,7 @@ export interface Proposal {
   totalValue: number;
   totalHours: number;
   billingNotes?: string;
-  leadId?: string; // Link to CRM Lead
+  leadId?: string;
 }
 
 // --- CRM ---

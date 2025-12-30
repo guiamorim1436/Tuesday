@@ -29,11 +29,11 @@ export const DEFAULT_FINANCE_CATEGORIES: string[] = [
   'Impostos'
 ];
 
-// Default SLA Tiers (Configurable)
+// Default SLA Tiers (Professional Agency Defaults)
 export const DEFAULT_SLA_TIERS: SLATier[] = [
-  { id: 'sla_1', name: 'Start', price: 1500, includedHours: 10, description: 'Suporte básico e manutenção' },
-  { id: 'sla_2', name: 'Growth', price: 3500, includedHours: 30, description: 'Evolução contínua e automações' },
-  { id: 'sla_3', name: 'Enterprise', price: 8000, includedHours: 80, description: 'Squad dedicado e alta prioridade' },
+  { id: 'sla_1', name: 'Standard', price: 2500, includedHours: 20, description: 'Manutenção e suporte reativo.' },
+  { id: 'sla_2', name: 'Professional', price: 5000, includedHours: 50, description: 'Evolução contínua e automações.' },
+  { id: 'sla_3', name: 'Enterprise', price: 12000, includedHours: 120, description: 'Squad dedicado e prioridade alta.' },
 ];
 
 // Default Work Config
@@ -237,9 +237,9 @@ export const MOCK_TRANSACTIONS: Transaction[] = [
 
 // Mock Users
 export const MOCK_USERS: User[] = [
-    { id: 'u1', name: 'Admin User', email: 'admin@nexus-os.com', role: 'admin', active: true, avatar: 'AD' },
-    { id: 'u2', name: 'Carlos Silva', email: 'carlos@nexus-os.com', role: 'manager', active: true, avatar: 'CS' },
-    { id: 'u3', name: 'Ana Souza', email: 'ana@nexus-os.com', role: 'operator', active: true, avatar: 'AS' },
+    { id: 'u1', name: 'Admin User', email: 'admin@nexus-os.com', role: 'admin', approved: true, avatar: 'AD' },
+    { id: 'u2', name: 'Carlos Silva', email: 'carlos@nexus-os.com', role: 'admin', approved: true, avatar: 'CS' },
+    { id: 'u3', name: 'Ana Souza', email: 'ana@nexus-os.com', role: 'admin', approved: true, avatar: 'AS' },
 ];
 
 // Mock Catalog

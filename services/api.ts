@@ -1,6 +1,6 @@
 
 import { supabase, isConfigured } from '../lib/supabaseClient';
-import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup } from '../types';
+import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup, User, UserRole } from '../types';
 import { 
     DEFAULT_WORK_CONFIG, 
     MOCK_CLIENTS, 
@@ -10,7 +10,8 @@ import {
     DEFAULT_CATEGORIES, 
     DEFAULT_SLA_TIERS, 
     DEFAULT_CUSTOM_FIELDS,
-    DEFAULT_TASK_TEMPLATES
+    DEFAULT_TASK_TEMPLATES,
+    MOCK_USERS // Assuming this exists or using local fallback
 } from '../constants';
 
 const DB_KEYS = {
@@ -25,7 +26,8 @@ const DB_KEYS = {
     SETTINGS_COMPANY: 'tuesday_db_settings_company',
     SETTINGS_WORK: 'tuesday_db_settings_work',
     SETTINGS_PROFILE: 'tuesday_db_settings_profile',
-    TEMPLATES: 'tuesday_db_templates'
+    TEMPLATES: 'tuesday_db_templates',
+    USERS: 'tuesday_db_users' // New key for users
 };
 
 const LocalDB = {
@@ -52,10 +54,22 @@ const LocalDB = {
 };
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
+
 const shouldUseLocalDB = (error: any) => {
     if (!isConfigured) return true;
-    if (error?.code === '42P01' || error?.message?.includes('Failed to fetch')) return true;
+    if (error) {
+        console.warn("API Error detected, falling back to LocalDB:", error.message || error);
+        return true;
+    }
     return false;
+};
+
+// Current Session Helper
+const getCurrentUser = (): User | null => {
+    try {
+        const u = localStorage.getItem('tuesday_current_user');
+        return u ? JSON.parse(u) : null;
+    } catch { return null; }
 };
 
 const toUUID = (val?: string | null) => (!val || val.trim() === '') ? null : val;
@@ -107,26 +121,102 @@ const mapTask = (data: any): Task => ({
 });
 
 export const api = {
-    // --- TASKS ---
+    // --- AUTHENTICATION & USERS ---
+    login: async (email: string, password: string): Promise<User | null> => {
+        // Simulating Auth against LocalDB
+        const users = LocalDB.get<User>(DB_KEYS.USERS, [{id: 'admin', name: 'Admin', email: 'admin@admin.com', password: 'admin', role: 'admin', approved: true, avatar: 'AD'}]);
+        const user = users.find(u => u.email === email && u.password === password);
+        
+        if (user) {
+            if (!user.approved) throw new Error("Conta aguardando aprovação do administrador.");
+            localStorage.setItem('tuesday_current_user', JSON.stringify(user));
+            return user;
+        }
+        return null;
+    },
+    logout: async () => {
+        localStorage.removeItem('tuesday_current_user');
+    },
+    register: async (userData: Partial<User>) => {
+        const users = LocalDB.get<User>(DB_KEYS.USERS, []);
+        if (users.find(u => u.email === userData.email)) throw new Error("Email já cadastrado.");
+        
+        const newUser: User = {
+            id: generateId(),
+            name: userData.name || '',
+            email: userData.email || '',
+            password: userData.password,
+            role: userData.role || 'client',
+            approved: false, // Default to false
+            avatar: userData.name?.substring(0,2).toUpperCase() || 'US'
+        };
+        LocalDB.set(DB_KEYS.USERS, [...users, newUser]);
+        return newUser;
+    },
+    getUsers: async () => {
+        // Only Admin usually calls this
+        return LocalDB.get<User>(DB_KEYS.USERS, []);
+    },
+    updateUser: async (user: User) => {
+        const users = LocalDB.get<User>(DB_KEYS.USERS, []);
+        const updated = users.map(u => u.id === user.id ? user : u);
+        LocalDB.set(DB_KEYS.USERS, updated);
+        return user;
+    },
+
+    // --- TASKS (WITH RBAC) ---
     getTasks: async () => {
+        const currentUser = getCurrentUser();
         try {
             const { data, error } = await supabase.from('tasks')
                 .select(`*, subtasks(*), comments(*)`)
                 .order('created_at', { ascending: false });
             if (error) throw error;
-            return (data || []).map(mapTask);
+            let allTasks = (data || []).map(mapTask);
+
+            // Filter based on Role
+            if (currentUser?.role === 'partner' && currentUser.linkedEntityId) {
+                // Get Clients belonging to this partner
+                const allClients = await api.getClients(); // Recursive optimization needed in real app
+                const myClientIds = allClients.filter(c => c.partnerId === currentUser.linkedEntityId).map(c => c.id);
+                allTasks = allTasks.filter(t => myClientIds.includes(t.clientId));
+            } else if (currentUser?.role === 'client' && currentUser.linkedEntityId) {
+                allTasks = allTasks.filter(t => t.clientId === currentUser.linkedEntityId);
+            }
+
+            return allTasks;
         } catch (e) {
-            if (shouldUseLocalDB(e)) return LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
+            if (shouldUseLocalDB(e)) {
+                let allTasks = LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
+                
+                // Filter based on Role (LocalDB)
+                if (currentUser?.role === 'partner' && currentUser.linkedEntityId) {
+                    const allClients = LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
+                    const myClientIds = allClients.filter(c => c.partnerId === currentUser.linkedEntityId).map(c => c.id);
+                    allTasks = allTasks.filter(t => myClientIds.includes(t.clientId));
+                } else if (currentUser?.role === 'client' && currentUser.linkedEntityId) {
+                    allTasks = allTasks.filter(t => t.clientId === currentUser.linkedEntityId);
+                }
+                return allTasks;
+            }
             throw e;
         }
     },
     createTask: async (task: Partial<Task>) => {
+        // Auto-assign 'REQUESTED' status if created by Client/Partner
+        const currentUser = getCurrentUser();
+        const status = (currentUser?.role === 'client' || currentUser?.role === 'partner') 
+            ? TaskStatus.REQUESTED 
+            : (task.status || TaskStatus.BACKLOG);
+
+        const taskWithMeta = { ...task, status, requestedBy: currentUser?.id };
+
         try {
             const { data, error } = await supabase.from('tasks').insert({
                 title: task.title,
                 description: task.description,
                 client_id: toUUID(task.clientId),
-                status: task.status,
+                status: status,
                 priority: task.priority,
                 category: task.category,
                 start_date: toDate(task.startDate),
@@ -142,7 +232,7 @@ export const api = {
             return mapTask(data);
         } catch (e) {
             if (shouldUseLocalDB(e)) {
-                const newTask = { ...task, id: generateId(), subtasks: [], comments: [] } as Task;
+                const newTask = { ...taskWithMeta, id: generateId(), subtasks: [], comments: [] } as Task;
                 const list = LocalDB.get(DB_KEYS.TASKS, MOCK_TASKS);
                 LocalDB.set(DB_KEYS.TASKS, [newTask, ...list]);
                 return newTask;
@@ -304,14 +394,32 @@ export const api = {
         }
     },
 
-    // --- CLIENTS & PARTNERS ---
+    // --- CLIENTS & PARTNERS (WITH RBAC) ---
     getClients: async () => {
+        const currentUser = getCurrentUser();
         try {
             const { data, error } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
             if (error) throw error;
-            return (data || []).map(mapClient);
+            let allClients = (data || []).map(mapClient);
+
+            // Filter logic
+            if (currentUser?.role === 'partner' && currentUser.linkedEntityId) {
+                allClients = allClients.filter(c => c.partnerId === currentUser.linkedEntityId);
+            } else if (currentUser?.role === 'client' && currentUser.linkedEntityId) {
+                allClients = allClients.filter(c => c.id === currentUser.linkedEntityId);
+            }
+
+            return allClients;
         } catch (e) {
-            if (shouldUseLocalDB(e)) return LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
+            if (shouldUseLocalDB(e)) {
+                let allClients = LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
+                if (currentUser?.role === 'partner' && currentUser.linkedEntityId) {
+                    allClients = allClients.filter(c => c.partnerId === currentUser.linkedEntityId);
+                } else if (currentUser?.role === 'client' && currentUser.linkedEntityId) {
+                    allClients = allClients.filter(c => c.id === currentUser.linkedEntityId);
+                }
+                return allClients;
+            }
             throw e;
         }
     },
@@ -667,7 +775,8 @@ export const api = {
     // --- USER PROFILE ---
     getUserProfile: async () => {
         try {
-            const { data } = await supabase.from('app_settings').select('value').eq('key', 'user_profile').single();
+            const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'user_profile').single();
+            if (error && error.code !== 'PGRST116') throw error; // Explicitly throw if error isn't just "not found"
             return data?.value;
         } catch (e) {
             if (shouldUseLocalDB(e)) return LocalDB.getObject(DB_KEYS.SETTINGS_PROFILE, {name: 'Admin User', role: 'CTO', email: 'admin@tuesday.com'});

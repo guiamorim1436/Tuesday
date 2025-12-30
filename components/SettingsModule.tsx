@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Bell, Key, Building, Save, Briefcase, Plus, Trash2, List, Clock, Terminal, AlertTriangle, Cloud, CloudOff, Wallet, Copy, RefreshCw, CheckCircle, Database, Loader2 } from 'lucide-react';
+import { User, Bell, Key, Building, Save, Briefcase, Plus, Trash2, List, Clock, Terminal, AlertTriangle, Cloud, CloudOff, Wallet, Copy, RefreshCw, CheckCircle, Database, Loader2, CreditCard } from 'lucide-react';
 import { ServiceCategory, SLATier, WorkConfig, User as UserType, CompanySettings, CustomFieldDefinition, TaskTemplateGroup, TaskTemplate, EntityType, TaskPriority } from '../types';
 import { DEFAULT_WORK_CONFIG } from '../constants';
 import { api } from '../services/api';
@@ -153,7 +153,7 @@ CREATE POLICY "Public Access" ON public.app_settings FOR ALL USING (true);
 
 -- Seed
 INSERT INTO public.sla_tiers (name, price, included_hours, description) VALUES
-('Start', 1500, 10, 'Suporte básico'), ('Growth', 3500, 30, 'Evolução contínua');
+('Standard', 2500, 20, 'Manutenção e suporte reativo.'), ('Professional', 5000, 50, 'Evolução contínua e automações.'), ('Enterprise', 12000, 120, 'Squad dedicado e prioridade alta.');
 
 INSERT INTO public.service_categories (name, is_billable) VALUES
 ('Automacao', true), ('Financeiro', false), ('Suporte', false);
@@ -165,6 +165,7 @@ INSERT INTO public.transaction_categories (name) VALUES
 export const SettingsModule: React.FC = () => {
   const [activeSection, setActiveSection] = useState('database');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Settings State
   const [transCategories, setTransCategories] = useState<{id: string, name: string}[]>([]);
@@ -191,6 +192,7 @@ export const SettingsModule: React.FC = () => {
 
   const loadSettings = async () => {
       setIsLoading(true);
+      setError(null);
       try {
           const [transCats, slas, cSettings, uProfile] = await Promise.all([
               api.getTransactionCategories(),
@@ -204,6 +206,7 @@ export const SettingsModule: React.FC = () => {
           if (uProfile) setUserProfile(uProfile);
       } catch (e: any) {
           console.error("Failed to load settings", e);
+          setError(e.message || "Erro desconhecido ao carregar configurações.");
       } finally {
           setIsLoading(false);
       }
@@ -342,6 +345,13 @@ export const SettingsModule: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 md:p-10">
         <div className="max-w-4xl mx-auto">
           
+          {error && activeSection !== 'database' && (
+              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm flex items-center">
+                  <AlertTriangle className="mr-2" size={16}/>
+                  {error}
+              </div>
+          )}
+
           {activeSection === 'database' && (
               <div className="animate-in fade-in duration-300">
                   <h3 className="text-2xl font-bold text-slate-800 mb-6">Instalação do Banco de Dados</h3>
@@ -359,16 +369,25 @@ export const SettingsModule: React.FC = () => {
                           </div>
                       </div>
                       <div className="space-y-4">
-                          <input className="w-full border rounded px-3 py-2 text-sm" placeholder="Project URL" value={supaUrl} onChange={e => setSupaUrl(e.target.value)} />
-                          <input type="password" className="w-full border rounded px-3 py-2 text-sm" placeholder="Anon Public Key" value={supaKey} onChange={e => setSupaKey(e.target.value)} />
-                          <div className="flex justify-end space-x-2">
-                              {localStorage.getItem('tuesday_supabase_url') && <button onClick={handleClearCredentials} className="px-4 py-2 text-rose-600 font-medium">Desconectar</button>}
-                              <button onClick={handleSaveCredentials} className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold">Salvar e Conectar</button>
+                          <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">Project URL</label>
+                              <input className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-base text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="https://..." value={supaUrl} onChange={e => setSupaUrl(e.target.value)} />
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">Anon Public Key</label>
+                              <input type="password" className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-base text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="ey..." value={supaKey} onChange={e => setSupaKey(e.target.value)} />
+                          </div>
+                          <div className="flex justify-end space-x-2 pt-2">
+                              {localStorage.getItem('tuesday_supabase_url') && <button onClick={handleClearCredentials} className="px-4 py-2 text-rose-600 font-medium hover:bg-rose-50 rounded-lg transition-colors">Desconectar</button>}
+                              <button onClick={handleSaveCredentials} className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-sm transition-colors">Salvar e Conectar</button>
                           </div>
                       </div>
                   </div>
                   <div className="relative">
-                      <button onClick={handleCopySQL} className="absolute top-4 right-4 bg-slate-800 text-white text-xs px-3 py-1.5 rounded shadow">Copiar SQL</button>
+                      <div className="flex justify-between items-end mb-2">
+                          <h4 className="text-sm font-bold text-slate-600">Script SQL de Instalação</h4>
+                          <button onClick={handleCopySQL} className="bg-slate-800 hover:bg-slate-700 text-white text-xs px-3 py-1.5 rounded shadow transition-colors">Copiar SQL</button>
+                      </div>
                       <pre className="bg-slate-900 text-slate-300 p-6 rounded-xl overflow-x-auto text-xs font-mono border border-slate-800 h-[300px]">{SQL_SCHEMA}</pre>
                   </div>
               </div>
@@ -376,28 +395,77 @@ export const SettingsModule: React.FC = () => {
 
           {activeSection === 'profile' && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-6">
-                <h3 className="text-xl font-bold">Meu Perfil</h3>
-                <input className="w-full border rounded px-3 py-2" value={userProfile.name} onChange={e => setUserProfile({...userProfile, name: e.target.value})} placeholder="Nome" />
-                <input className="w-full border rounded px-3 py-2" value={userProfile.role} onChange={e => setUserProfile({...userProfile, role: e.target.value})} placeholder="Cargo" />
-                <input className="w-full border rounded px-3 py-2" value={userProfile.email} onChange={e => setUserProfile({...userProfile, email: e.target.value})} placeholder="Email" />
-                <button onClick={handleSaveProfile} className="bg-indigo-600 text-white px-4 py-2 rounded font-bold">Salvar</button>
+                <h3 className="text-xl font-bold text-slate-800">Meu Perfil</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Nome Completo</label>
+                        <input className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" value={userProfile.name} onChange={e => setUserProfile({...userProfile, name: e.target.value})} placeholder="Seu Nome" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Cargo</label>
+                        <input className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" value={userProfile.role} onChange={e => setUserProfile({...userProfile, role: e.target.value})} placeholder="Seu Cargo" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                        <input className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" value={userProfile.email} onChange={e => setUserProfile({...userProfile, email: e.target.value})} placeholder="email@empresa.com" />
+                    </div>
+                </div>
+                <div className="pt-4 border-t border-slate-100 flex justify-end">
+                    <button onClick={handleSaveProfile} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-sm transition-colors">Salvar Alterações</button>
+                </div>
             </div>
           )}
 
           {activeSection === 'plans' && (
-             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-6">
-                <h3 className="text-xl font-bold">Planos de Serviço</h3>
-                <div className="bg-indigo-50 p-4 rounded-lg flex space-x-2">
-                    <input className="flex-1 border rounded px-2 py-1" placeholder="Nome do Plano" value={newSLA.name} onChange={e => setNewSLA({...newSLA, name: e.target.value})}/>
-                    <input type="number" className="w-24 border rounded px-2 py-1" placeholder="R$" value={newSLA.price} onChange={e => setNewSLA({...newSLA, price: Number(e.target.value)})}/>
-                    <input type="number" className="w-20 border rounded px-2 py-1" placeholder="Horas" value={newSLA.includedHours} onChange={e => setNewSLA({...newSLA, includedHours: Number(e.target.value)})}/>
-                    <button onClick={handleAddSLA} className="bg-indigo-600 text-white px-3 py-1 rounded"><Plus size={16}/></button>
+             <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-slate-800">Planos de Serviço (SLA)</h3>
                 </div>
-                <div className="space-y-2">
+                
+                {/* Add New Plan Card */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Adicionar Novo Plano</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div className="md:col-span-1">
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Nome do Plano</label>
+                            <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:ring-indigo-500 outline-none" placeholder="Ex: Enterprise" value={newSLA.name} onChange={e => setNewSLA({...newSLA, name: e.target.value})}/>
+                        </div>
+                        <div className="md:col-span-1">
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Preço Mensal (R$)</label>
+                            <input type="number" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:ring-indigo-500 outline-none" placeholder="0.00" value={newSLA.price || ''} onChange={e => setNewSLA({...newSLA, price: Number(e.target.value)})}/>
+                        </div>
+                        <div className="md:col-span-1">
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Horas Incluídas</label>
+                            <input type="number" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:ring-indigo-500 outline-none" placeholder="0" value={newSLA.includedHours || ''} onChange={e => setNewSLA({...newSLA, includedHours: Number(e.target.value)})}/>
+                        </div>
+                        <div className="md:col-span-1">
+                            <button onClick={handleAddSLA} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center transition-colors">
+                                <Plus size={18} className="mr-2"/> Adicionar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Existing Plans List */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {slaTiers.map(tier => (
-                        <div key={tier.id} className="flex justify-between p-3 border rounded items-center">
-                            <div><span className="font-bold">{tier.name}</span> - R$ {tier.price} ({tier.includedHours}h)</div>
-                            <button onClick={() => handleDeleteSLA(tier.id)} className="text-rose-500"><Trash2 size={16}/></button>
+                        <div key={tier.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow relative group">
+                            <button onClick={() => handleDeleteSLA(tier.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 transition-colors">
+                                <Trash2 size={18}/>
+                            </button>
+                            
+                            <div className="mb-4">
+                                <div className="h-10 w-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mb-3">
+                                    <CreditCard size={20}/>
+                                </div>
+                                <h4 className="text-lg font-bold text-slate-800">{tier.name}</h4>
+                                <p className="text-sm text-slate-500">{tier.description || 'Sem descrição definida.'}</p>
+                            </div>
+                            
+                            <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+                                <span className="text-2xl font-bold text-slate-900">R$ {Number(tier.price).toLocaleString('pt-BR')}</span>
+                                <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold">{tier.includedHours}h / mês</span>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -406,16 +474,16 @@ export const SettingsModule: React.FC = () => {
 
           {activeSection === 'finance' && (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-6">
-                  <h3 className="text-xl font-bold">Categorias Financeiras</h3>
-                  <div className="flex space-x-2">
-                      <input className="flex-1 border rounded px-3 py-2" placeholder="Nova Categoria" value={newTransCatName} onChange={e => setNewTransCatName(e.target.value)} />
-                      <button onClick={handleAddTransCat} className="bg-indigo-600 text-white px-4 py-2 rounded font-bold">Adicionar</button>
+                  <h3 className="text-xl font-bold text-slate-800">Categorias Financeiras</h3>
+                  <div className="flex space-x-3">
+                      <input className="flex-1 border border-slate-300 rounded-lg px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Nova Categoria (Ex: Licenças de Software)" value={newTransCatName} onChange={e => setNewTransCatName(e.target.value)} />
+                      <button onClick={handleAddTransCat} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-sm transition-colors">Adicionar</button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
                       {transCategories.map(cat => (
-                          <div key={cat.id} className="flex justify-between items-center p-2 bg-slate-50 border rounded">
-                              <span>{cat.name}</span>
-                              <button onClick={() => handleDeleteTransCat(cat.id)} className="text-slate-400 hover:text-rose-600"><Trash2 size={16}/></button>
+                          <div key={cat.id} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-lg group">
+                              <span className="font-medium text-slate-700">{cat.name}</span>
+                              <button onClick={() => handleDeleteTransCat(cat.id)} className="text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16}/></button>
                           </div>
                       ))}
                   </div>
@@ -423,12 +491,27 @@ export const SettingsModule: React.FC = () => {
           )}
 
           {activeSection === 'company' && (
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-4">
-                  <h3 className="text-xl font-bold">Dados da Empresa</h3>
-                  <input className="w-full border rounded px-3 py-2" placeholder="Nome Fantasia" value={companySettings.name} onChange={e => setCompanySettings({...companySettings, name: e.target.value})} />
-                  <input className="w-full border rounded px-3 py-2" placeholder="CNPJ" value={companySettings.cnpj} onChange={e => setCompanySettings({...companySettings, cnpj: e.target.value})} />
-                  <input className="w-full border rounded px-3 py-2" placeholder="Email Financeiro" value={companySettings.email} onChange={e => setCompanySettings({...companySettings, email: e.target.value})} />
-                  <button onClick={handleSaveCompany} className="bg-indigo-600 text-white px-4 py-2 rounded font-bold">Salvar</button>
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-6">
+                  <h3 className="text-xl font-bold text-slate-800">Dados da Empresa</h3>
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Nome Fantasia</label>
+                          <input className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Sua Empresa" value={companySettings.name} onChange={e => setCompanySettings({...companySettings, name: e.target.value})} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">CNPJ</label>
+                              <input className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="00.000.000/0001-00" value={companySettings.cnpj} onChange={e => setCompanySettings({...companySettings, cnpj: e.target.value})} />
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">Email Financeiro</label>
+                              <input className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="financeiro@..." value={companySettings.email} onChange={e => setCompanySettings({...companySettings, email: e.target.value})} />
+                          </div>
+                      </div>
+                  </div>
+                  <div className="pt-4 border-t border-slate-100 flex justify-end">
+                      <button onClick={handleSaveCompany} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-sm transition-colors">Salvar Dados</button>
+                  </div>
               </div>
           )}
         </div>

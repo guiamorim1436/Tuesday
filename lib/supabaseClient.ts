@@ -4,8 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 // --- CONFIGURAÇÃO MANUAL (HARDCODED) ---
 // Se você está cansado de desconexões, cole suas credenciais aqui.
 // Elas terão prioridade sobre o LocalStorage e Variáveis de Ambiente.
-const HARDCODED_URL = ''; // Cole seu Project URL aqui (ex: https://xyz.supabase.co)
-const HARDCODED_KEY = ''; // Cole sua Anon Public Key aqui
+const HARDCODED_URL = 'https://igblagwvotrrkghdycvv.supabase.co'; // Cole seu Project URL aqui (ex: https://xyz.supabase.co)
+const HARDCODED_KEY = 'sb_publishable_xvbnt__ddEcNmsMz5sgtmA_mi4fjTaP'; // Cole sua Anon Public Key aqui
 
 const getStoredConfig = () => {
     try {

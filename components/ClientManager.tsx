@@ -4,7 +4,8 @@ import { Search, CheckCircle, XCircle, PauseCircle, Clock, Building2, Wallet, Pl
 import { ClientStatus, Client, Partner, ServiceCategory, SLATier, CustomFieldDefinition, TaskTemplateGroup, Task, TaskStatus } from '../types';
 import { api } from '../services/api';
 import { DEFAULT_TASK_TEMPLATES } from '../constants';
-import { exportToCSV, parseCSV } from '../services/csvHelper';
+import { exportToCSV } from '../services/csvHelper';
+import { CSVImporter } from './CSVImporter';
 
 export const ClientManager: React.FC = () => {
   // Local State for CRUD
@@ -15,7 +16,7 @@ export const ClientManager: React.FC = () => {
   
   // Bulk Actions State
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
@@ -118,41 +119,31 @@ export const ClientManager: React.FC = () => {
       }
   };
 
-  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!e.target.files?.length) return;
-      const file = e.target.files[0];
-      
-      try {
-          const data = await parseCSV(file);
-          if (data.length === 0) return alert("CSV vazio ou inválido.");
-
-          if (activeTab === 'clients') {
-              // Mapeamento simples
-              const mapped = data.map(row => ({
-                  name: row.name || row.Nome || 'Sem Nome',
-                  status: (row.status || ClientStatus.ONBOARDING) as ClientStatus,
-                  healthScore: Number(row.healthScore || 100),
-                  onboardingDate: new Date().toISOString()
-              }));
-              const created = await api.createClientsBulk(mapped);
-              setClients(prev => [...prev, ...created]);
-          } else {
-               const mapped = data.map(row => ({
-                  name: row.name || row.Nome || 'Sem Nome',
-                  implementationFee: Number(row.implementationFee || 0),
-                  implementationDays: Number(row.implementationDays || 0)
-              }));
-              const created = await api.createPartnersBulk(mapped);
-              setPartners(prev => [...prev, ...created]);
-          }
-          alert(`${data.length} registros importados!`);
-      } catch (err) {
-          alert("Erro ao processar CSV.");
-          console.error(err);
-      } finally {
-          if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleImportData = async (data: any[]) => {
+      if (activeTab === 'clients') {
+          const mapped = data.map(row => ({
+              name: row.name || 'Sem Nome',
+              status: (row.status || ClientStatus.ONBOARDING) as ClientStatus,
+              healthScore: Number(row.healthScore || 100),
+              onboardingDate: new Date().toISOString()
+          }));
+          const created = await api.createClientsBulk(mapped);
+          setClients(prev => [...prev, ...created]);
+      } else {
+           const mapped = data.map(row => ({
+              name: row.name || 'Sem Nome',
+              implementationFee: Number(row.implementationFee || 0),
+              implementationDays: Number(row.implementationDays || 0)
+          }));
+          const created = await api.createPartnersBulk(mapped);
+          setPartners(prev => [...prev, ...created]);
       }
+      alert(`${data.length} registros importados!`);
   };
+
+  const importFields = activeTab === 'clients' 
+    ? [ { key: 'name', label: 'Nome', required: true }, { key: 'status', label: 'Status' }, { key: 'healthScore', label: 'Nota de Saúde' } ]
+    : [ { key: 'name', label: 'Nome', required: true }, { key: 'implementationFee', label: 'Taxa Impl.' }, { key: 'implementationDays', label: 'Dias Impl.' } ];
 
   // --- Helper: Lifecycle Logic ---
   const getClientPhase = (client: Client, partner?: Partner) => {
@@ -307,10 +298,10 @@ export const ClientManager: React.FC = () => {
 
   const getStatusBadge = (status: ClientStatus) => {
     switch (status) {
-      case ClientStatus.ACTIVE: return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800"><CheckCircle size={12} className="mr-1"/> Ativo</span>;
-      case ClientStatus.PAUSED: return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800"><PauseCircle size={12} className="mr-1"/> Pausado</span>;
-      case ClientStatus.CHURNED: return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600"><XCircle size={12} className="mr-1"/> Encerrado</span>;
-      case ClientStatus.ONBOARDING: return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><Clock size={12} className="mr-1"/> Onboarding</span>;
+      case ClientStatus.ACTIVE: return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200"><CheckCircle size={12} className="mr-1"/> Ativo</span>;
+      case ClientStatus.PAUSED: return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><PauseCircle size={12} className="mr-1"/> Pausado</span>;
+      case ClientStatus.CHURNED: return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200"><XCircle size={12} className="mr-1"/> Encerrado</span>;
+      case ClientStatus.ONBOARDING: return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"><Clock size={12} className="mr-1"/> Onboarding</span>;
     }
   };
 
@@ -323,16 +314,15 @@ export const ClientManager: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-slate-800">Relacionamento</h2>
           <div className="flex space-x-2">
-            <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleImportCSV} />
             <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center"
+                onClick={() => setIsImporterOpen(true)}
+                className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center transition-colors"
             >
                 <Upload size={16} className="mr-2"/> Importar
             </button>
             <button 
                 onClick={handleExportCSV}
-                className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center"
+                className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center transition-colors"
             >
                 <Download size={16} className="mr-2"/> Exportar
             </button>
@@ -384,7 +374,7 @@ export const ClientManager: React.FC = () => {
             <input 
               type="text" 
               placeholder={activeTab === 'clients' ? "Buscar cliente por nome..." : "Buscar parceiro..."}
-              className="block w-full pl-10 pr-3 py-2 bg-white border border-slate-300 rounded-lg leading-5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm shadow-sm"
+              className="block w-full pl-10 pr-3 py-2 bg-white border border-slate-300 rounded-lg leading-5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm shadow-sm transition-all"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -413,17 +403,17 @@ export const ClientManager: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="w-10 px-6 py-3">
-                      <button onClick={toggleSelectAll} className="text-slate-400 hover:text-indigo-600">
-                          {selectedIds.size > 0 && selectedIds.size === filteredClients.length ? <CheckSquare size={18}/> : <Square size={18}/>}
+                  <th className="w-12 px-6 py-4">
+                      <button onClick={toggleSelectAll} className="text-slate-400 hover:text-indigo-600 transition-colors">
+                          {selectedIds.size > 0 && selectedIds.size === filteredClients.length ? <CheckSquare size={20}/> : <Square size={20}/>}
                       </button>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Cliente</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Fase do Contrato</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Consumo</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Plano</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Ações</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Fase do Contrato</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Consumo</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Plano</th>
+                  <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-200">
@@ -439,20 +429,21 @@ export const ClientManager: React.FC = () => {
                    const isSelected = selectedIds.has(client.id);
 
                    return (
-                  <tr key={client.id} className={`hover:bg-slate-50 transition-colors group ${isSelected ? 'bg-indigo-50/30' : ''}`}>
+                  <tr key={client.id} className={`hover:bg-slate-50 transition-colors group ${isSelected ? 'bg-indigo-50/40' : ''}`}>
+                    {/* ... (Existing Row Content) ... */}
                     <td className="px-6 py-4">
-                        <button onClick={() => toggleSelection(client.id)} className={`${isSelected ? 'text-indigo-600' : 'text-slate-300 hover:text-indigo-400'}`}>
-                           {isSelected ? <CheckSquare size={18}/> : <Square size={18}/>}
+                        <button onClick={() => toggleSelection(client.id)} className={`${isSelected ? 'text-indigo-600' : 'text-slate-300 hover:text-indigo-400'} transition-colors`}>
+                           {isSelected ? <CheckSquare size={20}/> : <Square size={20}/>}
                         </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg">
+                        <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg border border-indigo-200">
                           {client.name.charAt(0)}
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-semibold text-slate-900">{client.name}</div>
-                          {partner && <div className="text-xs text-slate-500">Parceiro: {partner.name}</div>}
+                          <div className="text-sm font-bold text-slate-800">{client.name}</div>
+                          {partner && <div className="text-xs text-slate-500">Parceiro: <span className="font-medium">{partner.name}</span></div>}
                         </div>
                       </div>
                     </td>
@@ -461,9 +452,9 @@ export const ClientManager: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                        <div className="flex items-center">
-                          {lifecycle.phase === 'implementation' && <Rocket size={14} className="text-blue-500 mr-2" />}
-                          {lifecycle.phase === 'support' && <ShieldCheck size={14} className="text-emerald-500 mr-2" />}
-                          {lifecycle.phase === 'contract' && <Zap size={14} className="text-amber-500 mr-2" />}
+                          {lifecycle.phase === 'implementation' && <Rocket size={16} className="text-blue-500 mr-2" />}
+                          {lifecycle.phase === 'support' && <ShieldCheck size={16} className="text-emerald-500 mr-2" />}
+                          {lifecycle.phase === 'contract' && <Zap size={16} className="text-amber-500 mr-2" />}
                           <div className="flex flex-col">
                              <span className="text-sm font-medium text-slate-700">{lifecycle.label}</span>
                              {lifecycle.phase !== 'contract' && (
@@ -481,9 +472,9 @@ export const ClientManager: React.FC = () => {
                                   <span className={`font-bold ${isOverLimit ? 'text-rose-600' : 'text-slate-700'}`}>
                                     {hoursUsed.toFixed(1)}h
                                   </span>
-                                  <span className="text-slate-400">/ {hoursTotal}h</span>
+                                  <span className="text-slate-400 font-medium">/ {hoursTotal}h</span>
                                </div>
-                               <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                               <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
                                   <div 
                                     className={`h-2 rounded-full transition-all duration-500 ${getHoursStatusColor(hoursUsed, hoursTotal)}`} 
                                     style={{ width: `${hoursPercent}%` }}
@@ -496,27 +487,27 @@ export const ClientManager: React.FC = () => {
                         )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                       <span className="font-medium text-indigo-900">{sla?.name || 'N/A'}</span>
-                       <div className="text-xs text-slate-400">R$ {Number(sla?.price || 0).toLocaleString('pt-BR')}</div>
+                       <span className="font-bold text-indigo-900 block">{sla?.name || 'N/A'}</span>
+                       <div className="text-xs text-slate-500 font-medium">R$ {Number(sla?.price || 0).toLocaleString('pt-BR')}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                             onClick={() => {setSelectedClientForTemplate(client); setIsTemplateModalOpen(true);}}
-                            className="text-slate-400 hover:text-emerald-600 p-1 bg-white border border-slate-200 rounded hover:border-emerald-200"
+                            className="text-slate-400 hover:text-emerald-600 p-1.5 bg-white border border-slate-200 rounded-lg hover:border-emerald-200 shadow-sm transition-colors"
                             title="Aplicar Modelo de Tarefas"
                         >
                           <Layers size={16} />
                         </button>
                         <button 
                           onClick={() => handleOpenClientModal(client)}
-                          className="text-slate-400 hover:text-indigo-600 p-1 bg-white border border-slate-200 rounded hover:border-indigo-200"
+                          className="text-slate-400 hover:text-indigo-600 p-1.5 bg-white border border-slate-200 rounded-lg hover:border-indigo-200 shadow-sm transition-colors"
                         >
                           <Edit2 size={16} />
                         </button>
                         <button 
                           onClick={() => handleDeleteClient(client.id)}
-                          className="text-slate-400 hover:text-rose-600 p-1 bg-white border border-slate-200 rounded hover:border-rose-200"
+                          className="text-slate-400 hover:text-rose-600 p-1.5 bg-white border border-slate-200 rounded-lg hover:border-rose-200 shadow-sm transition-colors"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -532,22 +523,22 @@ export const ClientManager: React.FC = () => {
             {filteredPartners.map(partner => {
                 const isSelected = selectedIds.has(partner.id);
                 return (
-              <div key={partner.id} className={`bg-white rounded-xl shadow-sm border p-6 flex flex-col justify-between hover:shadow-md transition-shadow group relative ${isSelected ? 'border-indigo-400 ring-1 ring-indigo-400' : 'border-slate-200'}`}>
+              <div key={partner.id} className={`bg-white rounded-xl shadow-sm border p-6 flex flex-col justify-between hover:shadow-md transition-shadow group relative ${isSelected ? 'border-indigo-400 ring-1 ring-indigo-400 bg-indigo-50/20' : 'border-slate-200'}`}>
                  <div className="absolute top-4 left-4">
-                     <button onClick={() => toggleSelection(partner.id)} className={`${isSelected ? 'text-indigo-600' : 'text-slate-300 hover:text-indigo-400'}`}>
-                           {isSelected ? <CheckSquare size={18}/> : <Square size={18}/>}
+                     <button onClick={() => toggleSelection(partner.id)} className={`${isSelected ? 'text-indigo-600' : 'text-slate-300 hover:text-indigo-400'} transition-colors`}>
+                           {isSelected ? <CheckSquare size={20}/> : <Square size={20}/>}
                     </button>
                  </div>
                 <div className="absolute top-4 right-4 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                         onClick={() => handleOpenPartnerModal(partner)}
-                        className="text-slate-400 hover:text-indigo-600 p-1.5 bg-white border border-slate-200 rounded-full hover:bg-slate-50"
+                        className="text-slate-400 hover:text-indigo-600 p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
                     >
                         <Edit2 size={14} />
                     </button>
                     <button 
                         onClick={() => handleDeletePartner(partner.id)}
-                        className="text-slate-400 hover:text-rose-600 p-1.5 bg-white border border-slate-200 rounded-full hover:bg-slate-50"
+                        className="text-slate-400 hover:text-rose-600 p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
                     >
                         <Trash2 size={14} />
                     </button>
@@ -555,14 +546,14 @@ export const ClientManager: React.FC = () => {
 
                 <div className="mt-6">
                   <div className="flex justify-between items-start mb-4">
-                    <div className="p-3 bg-purple-50 rounded-lg text-purple-600">
+                    <div className="p-3 bg-purple-50 rounded-lg text-purple-600 border border-purple-100">
                       <Building2 size={24} />
                     </div>
                   </div>
                   <h3 className="text-lg font-bold text-slate-800 mb-1">{partner.name}</h3>
                   <div className="space-y-1 mb-4">
-                     <p className="text-xs text-slate-500">Implementação Padrão:</p>
-                     <p className="text-sm font-semibold text-slate-700 flex items-center">
+                     <p className="text-xs text-slate-500 font-medium">Implementação Padrão:</p>
+                     <p className="text-sm font-bold text-slate-700 flex items-center">
                         <DollarSign size={14} className="mr-1"/> 
                         R$ {Number(partner.implementationFee).toLocaleString('pt-BR')} 
                         <span className="mx-2 text-slate-300">|</span>
@@ -573,12 +564,12 @@ export const ClientManager: React.FC = () => {
                   
                   <div className="space-y-3 pt-4 border-t border-slate-100">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Clientes Indicados</span>
-                      <span className="font-medium text-slate-800">{partner.totalReferrals}</span>
+                      <span className="text-slate-500 font-medium">Clientes Indicados</span>
+                      <span className="font-bold text-slate-800">{partner.totalReferrals}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Comissão Paga</span>
-                      <span className="font-medium text-emerald-600">R$ {Number(partner.totalCommissionPaid).toLocaleString('pt-BR')}</span>
+                      <span className="text-slate-500 font-medium">Comissão Paga</span>
+                      <span className="font-bold text-emerald-600">R$ {Number(partner.totalCommissionPaid).toLocaleString('pt-BR')}</span>
                     </div>
                   </div>
                 </div>
@@ -588,7 +579,16 @@ export const ClientManager: React.FC = () => {
         )}
       </div>
       
-      {/* (MODALS CODE OMITTED FOR BREVITY, ASSUME UNCHANGED BUT INCLUDED IN FINAL) */}
+      {/* CSV Importer */}
+      <CSVImporter 
+        isOpen={isImporterOpen}
+        onClose={() => setIsImporterOpen(false)}
+        onImport={handleImportData}
+        fields={importFields}
+        entityName={activeTab === 'clients' ? 'Clientes' : 'Parceiros'}
+      />
+
+      {/* ... (Existing Modals) ... */}
       {/* Re-inserting modal code to ensure file integrity */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -607,7 +607,7 @@ export const ClientManager: React.FC = () => {
                         <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Empresa</label>
                         <input 
                             type="text" 
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                            className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                             value={activeTab === 'clients' ? editingClient.name : editingPartner.name}
                             onChange={(e) => activeTab === 'clients' ? setEditingClient({...editingClient, name: e.target.value}) : setEditingPartner({...editingPartner, name: e.target.value})}
                         />
@@ -619,7 +619,7 @@ export const ClientManager: React.FC = () => {
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
                                     <select 
-                                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                        className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                                         value={editingClient.status}
                                         onChange={(e) => setEditingClient({...editingClient, status: e.target.value as ClientStatus})}
                                     >
@@ -629,7 +629,7 @@ export const ClientManager: React.FC = () => {
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Parceiro Indicador</label>
                                     <select 
-                                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                        className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                                         value={editingClient.partnerId || ''}
                                         onChange={(e) => setEditingClient({...editingClient, partnerId: e.target.value})}
                                     >
@@ -647,7 +647,7 @@ export const ClientManager: React.FC = () => {
                                 <div>
                                     <label className="block text-xs font-medium text-indigo-900 mb-1">Plano de SLA (Vigência Pós-Implementação)</label>
                                     <select 
-                                        className="w-full px-3 py-2 bg-white border border-indigo-200 rounded-lg text-slate-900 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                        className="w-full px-3 py-2.5 bg-white border border-indigo-200 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                                         value={editingClient.slaTierId}
                                         onChange={(e) => setEditingClient({...editingClient, slaTierId: e.target.value})}
                                     >
@@ -663,7 +663,7 @@ export const ClientManager: React.FC = () => {
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Data de Início (Implementação)</label>
                                 <input 
                                     type="date" 
-                                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                                     value={editingClient.onboardingDate}
                                     onChange={(e) => setEditingClient({...editingClient, onboardingDate: e.target.value})}
                                 />
@@ -673,7 +673,7 @@ export const ClientManager: React.FC = () => {
                 </div>
                 <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-3">
                     <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-white transition-colors">Cancelar</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center shadow-sm"><Save size={16} className="mr-2"/>Salvar</button>
+                    <button onClick={handleSave} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center shadow-sm"><Save size={16} className="mr-2"/>Salvar</button>
                 </div>
             </div>
         </div>
