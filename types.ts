@@ -283,3 +283,33 @@ export interface Lead {
   lastInteraction: string;
   notes: string;
 }
+
+// --- PLAYBOOKS (NEW) ---
+
+export type PlaybookBlockType = 'hero' | 'text' | 'flow' | 'faq' | 'cards' | 'steps' | 'alert';
+
+export interface PlaybookBlock {
+  id: string;
+  type: PlaybookBlockType;
+  content: any; // Dynamic content based on type
+  styles?: Record<string, any>;
+}
+
+export interface PlaybookTheme {
+  primaryColor: string;
+  accentColor: string;
+  logoUrl?: string;
+  fontFamily?: string;
+}
+
+export interface Playbook {
+  id: string;
+  clientId: string;
+  title: string;
+  description?: string;
+  blocks: PlaybookBlock[];
+  theme: PlaybookTheme;
+  createdAt: string;
+  updatedAt: string;
+  isPublished: boolean;
+}

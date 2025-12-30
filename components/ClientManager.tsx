@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, CheckCircle, XCircle, PauseCircle, Clock, Plus, Edit2, Trash2, X, Save, DollarSign, Upload, CheckSquare, Square, Filter, Loader2, Download, Layers } from 'lucide-react';
+import { Search, CheckCircle, XCircle, PauseCircle, Clock, Plus, Edit2, Trash2, X, Save, DollarSign, Upload, CheckSquare, Square, Filter, Loader2, Download, Layers, Calendar } from 'lucide-react';
 import { ClientStatus, Client, Partner, SLATier, TaskTemplateGroup, TaskStatus, Task } from '../types';
 import { api } from '../services/api';
 import { DEFAULT_TASK_TEMPLATES } from '../constants';
@@ -21,8 +21,11 @@ export const ClientManager: React.FC = () => {
   const [taskTemplates] = useState<TaskTemplateGroup[]>(DEFAULT_TASK_TEMPLATES); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingClient, setEditingClient] = useState<Partial<Client>>({});
-  const [editingPartner, setEditingPartner] = useState<Partial<Partner>>({});
+  
+  // Initialize with safe defaults to avoid uncontrolled inputs
+  const [editingClient, setEditingClient] = useState<Partial<Client>>({ name: '', status: ClientStatus.ONBOARDING, customFields: {} });
+  const [editingPartner, setEditingPartner] = useState<Partial<Partner>>({ name: '', customFields: {} });
+  
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [selectedClientForTemplate, setSelectedClientForTemplate] = useState<Client | null>(null);
 
@@ -159,7 +162,16 @@ export const ClientManager: React.FC = () => {
     } else {
       setModalMode('create');
       const defaultSLA = slaTiers[0]?.id || '';
-      setEditingClient({ status: ClientStatus.ONBOARDING, slaTierId: defaultSLA, healthScore: 100, hoursUsedMonth: 0, onboardingDate: new Date().toISOString().split('T')[0], customFields: {} });
+      setEditingClient({ 
+          name: '',
+          status: ClientStatus.ONBOARDING, 
+          slaTierId: defaultSLA, 
+          healthScore: 100, 
+          hoursUsedMonth: 0, 
+          onboardingDate: new Date().toISOString().split('T')[0], 
+          billingDay: 1, // Default billing day
+          customFields: {} 
+      });
     }
     setIsModalOpen(true);
   };
@@ -168,10 +180,10 @@ export const ClientManager: React.FC = () => {
       setActiveTab('partners');
       if (partner) {
           setModalMode('edit');
-          setEditingPartner(partner);
+          setEditingPartner({ ...partner, customFields: partner.customFields || {} });
       } else {
           setModalMode('create');
-          setEditingPartner({ customFields: {} });
+          setEditingPartner({ name: '', customFields: {} });
       }
       setIsModalOpen(true);
   };
@@ -219,6 +231,10 @@ export const ClientManager: React.FC = () => {
   const handleSave = async () => {
       try {
           if (activeTab === 'clients') {
+              // Validation
+              if (!editingClient.name?.trim()) return alert("O nome da empresa é obrigatório.");
+              if (!editingClient.slaTierId) return alert("Selecione um plano SLA.");
+
               if (modalMode === 'create') {
                   const created = await api.createClient(editingClient);
                   setClients([created, ...clients]);
@@ -247,6 +263,9 @@ export const ClientManager: React.FC = () => {
                   setClients(clients.map(c => c.id === updated.id ? updated : c));
               }
           } else {
+               // Validation Partner
+               if (!editingPartner.name?.trim()) return alert("O nome da consultoria é obrigatório.");
+
                if (modalMode === 'create') {
                   const created = await api.createPartner(editingPartner);
                   setPartners([created, ...partners]);
@@ -257,9 +276,9 @@ export const ClientManager: React.FC = () => {
               }
           }
           setIsModalOpen(false);
-      } catch (e) {
-          console.error(e);
-          alert('Erro ao salvar.');
+      } catch (e: any) {
+          console.error("Erro ao salvar:", e);
+          alert('Erro ao salvar: ' + (e.message || "Verifique se o banco de dados está conectado."));
       }
   };
 
@@ -418,27 +437,52 @@ export const ClientManager: React.FC = () => {
                 <div className="p-6 space-y-4">
                     {activeTab === 'clients' ? (
                         <>
-                            <div><label className="block text-sm font-bold text-slate-700 mb-1">Nome da Empresa</label><input className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.name} onChange={e => setEditingClient({...editingClient, name: e.target.value})} /></div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Nome da Empresa</label>
+                                <input 
+                                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-900" 
+                                    value={editingClient.name || ''} 
+                                    onChange={e => setEditingClient({...editingClient, name: e.target.value})} 
+                                    placeholder="Ex: Acme Corp"
+                                />
+                            </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="block text-sm font-bold text-slate-700 mb-1">Status</label><select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.status} onChange={e => setEditingClient({...editingClient, status: e.target.value as ClientStatus})}>{Object.values(ClientStatus).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                                 <div><label className="block text-sm font-bold text-slate-700 mb-1">Plano SLA</label><select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.slaTierId || ''} onChange={e => setEditingClient({...editingClient, slaTierId: e.target.value})}><option value="">Selecione...</option>{slaTiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
                             </div>
                             <div><label className="block text-sm font-bold text-slate-700 mb-1">Parceiro Implementador</label><select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.partnerId || ''} onChange={e => setEditingClient({...editingClient, partnerId: e.target.value})}><option value="">Nenhum</option>{partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
                             <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Data Onboarding</label><input type="date" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.onboardingDate} onChange={e => setEditingClient({...editingClient, onboardingDate: e.target.value})} /></div>
-                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Health Score</label><input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.healthScore} onChange={e => setEditingClient({...editingClient, healthScore: Number(e.target.value)})} /></div>
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Data Onboarding</label>
+                                    <input type="date" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.onboardingDate || ''} onChange={e => setEditingClient({...editingClient, onboardingDate: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Dia Vencimento</label>
+                                    <input type="number" min="1" max="31" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.billingDay || ''} onChange={e => setEditingClient({...editingClient, billingDay: Number(e.target.value)})} placeholder="Ex: 10" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Health Score</label><input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.healthScore || ''} onChange={e => setEditingClient({...editingClient, healthScore: Number(e.target.value)})} placeholder="0-100" /></div>
                             </div>
                         </>
                     ) : (
                         <>
-                             <div><label className="block text-sm font-bold text-slate-700 mb-1">Nome da Consultoria</label><input className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.name} onChange={e => setEditingPartner({...editingPartner, name: e.target.value})} /></div>
+                             <div>
+                                 <label className="block text-sm font-bold text-slate-700 mb-1">Nome da Consultoria</label>
+                                 <input 
+                                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" 
+                                    value={editingPartner.name || ''} 
+                                    onChange={e => setEditingPartner({...editingPartner, name: e.target.value})} 
+                                    placeholder="Ex: Consultoria XYZ"
+                                 />
+                             </div>
                              <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Taxa Impl. (R$)</label><input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.implementationFee} onChange={e => setEditingPartner({...editingPartner, implementationFee: Number(e.target.value)})} /></div>
-                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Dias Padrão</label><input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.implementationDays} onChange={e => setEditingPartner({...editingPartner, implementationDays: Number(e.target.value)})} /></div>
+                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Taxa Impl. (R$)</label><input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.implementationFee || ''} onChange={e => setEditingPartner({...editingPartner, implementationFee: Number(e.target.value)})} /></div>
+                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Dias Padrão</label><input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.implementationDays || ''} onChange={e => setEditingPartner({...editingPartner, implementationDays: Number(e.target.value)})} /></div>
                              </div>
                              <div>
                                  <label className="block text-sm font-bold text-slate-700 mb-1">Custo por Cliente (R$)</label>
-                                 <input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.costPerSeat} onChange={e => setEditingPartner({...editingPartner, costPerSeat: Number(e.target.value)})} placeholder="Ex: 300.00" />
+                                 <input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.costPerSeat || ''} onChange={e => setEditingPartner({...editingPartner, costPerSeat: Number(e.target.value)})} placeholder="Ex: 300.00" />
                                  <p className="text-xs text-slate-500 mt-1">Valor cobrado mensalmente do parceiro por cada cliente ativo.</p>
                              </div>
                         </>

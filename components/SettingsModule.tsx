@@ -6,13 +6,14 @@ import { DEFAULT_CUSTOM_FIELDS } from '../constants';
 import { api } from '../services/api';
 import { supabase, isConfigured } from '../lib/supabaseClient';
 
-const SQL_SCHEMA = `-- SCRIPT DE ATUALIZAÇÃO COMPLETO DO BANCO DE DADOS (TUESDAY ERP)
--- Execute este script no SQL Editor do Supabase para corrigir todas as tabelas.
+const SQL_SCHEMA = `-- SCRIPT DE ATUALIZAÇÃO BLINDADO (IDEMPOTENTE)
+-- Este script corrige tabelas, colunas e políticas de segurança.
+-- Pode ser executado múltiplas vezes sem gerar erro "already exists".
 
 -- 1. Extensões
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 2. Criação de Tabelas Core
+-- 2. Criação de Tabelas (Se não existirem)
 
 CREATE TABLE IF NOT EXISTS public.app_settings (
     key TEXT PRIMARY KEY,
@@ -93,7 +94,6 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Outras Tabelas de Apoio
 CREATE TABLE IF NOT EXISTS public.app_users (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
@@ -157,59 +157,104 @@ CREATE TABLE IF NOT EXISTS public.comments (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 3. GARANTIA DE COLUNAS (MIGRAÇÕES)
+CREATE TABLE IF NOT EXISTS public.playbooks (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    client_id UUID REFERENCES public.clients(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    blocks JSONB DEFAULT '[]'::jsonb,
+    theme JSONB DEFAULT '{"primaryColor": "#4F46E5", "accentColor": "#10B981"}'::jsonb,
+    is_published BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3. Verificação e Criação de Colunas Faltantes
 DO $$
 BEGIN
-    -- Clients: custom_fields
+    -- Clients
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='custom_fields') THEN
         ALTER TABLE public.clients ADD COLUMN custom_fields JSONB DEFAULT '{}'::jsonb;
     END IF;
-    -- Partners: cost_per_seat & custom_fields
+    
+    -- Partners
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='partners' AND column_name='cost_per_seat') THEN
         ALTER TABLE public.partners ADD COLUMN cost_per_seat NUMERIC DEFAULT 0;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='partners' AND column_name='custom_fields') THEN
         ALTER TABLE public.partners ADD COLUMN custom_fields JSONB DEFAULT '{}'::jsonb;
     END IF;
-    -- Transactions: custom_fields
+    
+    -- Transactions
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='transactions' AND column_name='custom_fields') THEN
         ALTER TABLE public.transactions ADD COLUMN custom_fields JSONB DEFAULT '{}'::jsonb;
     END IF;
-    -- Tasks: time tracking
+    
+    -- Tasks
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tasks' AND column_name='is_tracking_time') THEN
         ALTER TABLE public.tasks ADD COLUMN is_tracking_time BOOLEAN DEFAULT false;
     END IF;
 END
 $$;
 
--- 4. RLS (Segurança)
-ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.subtasks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.sla_tiers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.service_categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transaction_categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.custom_field_definitions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.task_template_groups ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+-- 4. RLS (Políticas de Segurança)
+-- Removemos as políticas antigas antes de criar para evitar erro "42710 already exists"
 
+ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Users" ON public.app_users;
 CREATE POLICY "Public Access Users" ON public.app_users FOR ALL USING (true);
+
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Clients" ON public.clients;
 CREATE POLICY "Public Access Clients" ON public.clients FOR ALL USING (true);
+
+ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Partners" ON public.partners;
 CREATE POLICY "Public Access Partners" ON public.partners FOR ALL USING (true);
+
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Tasks" ON public.tasks;
 CREATE POLICY "Public Access Tasks" ON public.tasks FOR ALL USING (true);
+
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Transactions" ON public.transactions;
 CREATE POLICY "Public Access Transactions" ON public.transactions FOR ALL USING (true);
+
+ALTER TABLE public.subtasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Subtasks" ON public.subtasks;
 CREATE POLICY "Public Access Subtasks" ON public.subtasks FOR ALL USING (true);
+
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Comments" ON public.comments;
 CREATE POLICY "Public Access Comments" ON public.comments FOR ALL USING (true);
+
+ALTER TABLE public.sla_tiers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access SLA" ON public.sla_tiers;
 CREATE POLICY "Public Access SLA" ON public.sla_tiers FOR ALL USING (true);
+
+ALTER TABLE public.service_categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Cats" ON public.service_categories;
 CREATE POLICY "Public Access Cats" ON public.service_categories FOR ALL USING (true);
+
+ALTER TABLE public.transaction_categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access TransCats" ON public.transaction_categories;
 CREATE POLICY "Public Access TransCats" ON public.transaction_categories FOR ALL USING (true);
+
+ALTER TABLE public.custom_field_definitions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access CFs" ON public.custom_field_definitions;
 CREATE POLICY "Public Access CFs" ON public.custom_field_definitions FOR ALL USING (true);
+
+ALTER TABLE public.task_template_groups ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Templates" ON public.task_template_groups;
 CREATE POLICY "Public Access Templates" ON public.task_template_groups FOR ALL USING (true);
+
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Settings" ON public.app_settings;
 CREATE POLICY "Public Access Settings" ON public.app_settings FOR ALL USING (true);
+
+ALTER TABLE public.playbooks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Playbooks" ON public.playbooks;
+CREATE POLICY "Public Access Playbooks" ON public.playbooks FOR ALL USING (true);
 `;
 
 export const SettingsModule: React.FC = () => {
@@ -387,7 +432,7 @@ export const SettingsModule: React.FC = () => {
                     </div>
                     <div>
                         <p className="text-sm font-bold">Lembrete de Sistema</p>
-                        <p className="text-xs text-indigo-100">O sistema precisa que as tabelas sejam criadas. Clique em "Ver Script" para rodar o SQL.</p>
+                        <p className="text-xs text-indigo-100">Atualização do Banco de Dados necessária. Rode o novo script.</p>
                     </div>
                 </div>
                 <button onClick={() => setActiveSection('database')} className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition-colors">

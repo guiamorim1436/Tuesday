@@ -1,6 +1,6 @@
 
 import { supabase, isConfigured } from '../lib/supabaseClient';
-import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup, User, UserRole, Comment, Subtask } from '../types';
+import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup, User, UserRole, Comment, Subtask, Playbook, PlaybookBlock } from '../types';
 import { 
     DEFAULT_WORK_CONFIG, 
     MOCK_CLIENTS, 
@@ -28,7 +28,8 @@ const DB_KEYS = {
     SETTINGS_WORK: 'tuesday_db_settings_work',
     SETTINGS_PROFILE: 'tuesday_db_settings_profile',
     TEMPLATES: 'tuesday_db_templates',
-    USERS: 'tuesday_db_users'
+    USERS: 'tuesday_db_users',
+    PLAYBOOKS: 'tuesday_db_playbooks'
 };
 
 const LocalDB = {
@@ -807,5 +808,148 @@ export const api = {
         const newCF = { ...cf, id: generateId() } as CustomFieldDefinition;
         LocalDB.set(DB_KEYS.CUSTOM_FIELDS, [...cfs, newCF]);
         return newCF;
+    },
+
+    // --- PLAYBOOKS (AI POWERED) ---
+    
+    getPlaybooks: async (): Promise<Playbook[]> => {
+        if (isConfigured) {
+            const { data, error } = await supabase.from('playbooks').select('*');
+            if (!error) return data.map(p => ({
+                ...p, 
+                clientId: p.client_id, 
+                createdAt: p.created_at, 
+                updatedAt: p.updated_at,
+                isPublished: p.is_published,
+                blocks: Array.isArray(p.blocks) ? p.blocks : [] // Ensure blocks is always an array
+            }));
+        }
+        return LocalDB.get<Playbook>(DB_KEYS.PLAYBOOKS, []);
+    },
+
+    createPlaybook: async (playbook: Partial<Playbook>): Promise<Playbook> => {
+        if (isConfigured) {
+            const payload = {
+                client_id: toUUID(playbook.clientId),
+                title: playbook.title,
+                description: playbook.description,
+                blocks: playbook.blocks || [],
+                theme: playbook.theme || { primaryColor: '#4F46E5', accentColor: '#10B981' },
+                is_published: playbook.isPublished || false
+            };
+            const { data, error } = await supabase.from('playbooks').insert([payload]).select().single();
+            if (error) {
+                console.error("Supabase Error (Create Playbook):", error);
+                throw error;
+            }
+            return {
+                ...data,
+                clientId: data.client_id,
+                createdAt: data.created_at,
+                updatedAt: data.updated_at,
+                isPublished: data.is_published,
+                blocks: Array.isArray(data.blocks) ? data.blocks : []
+            };
+        }
+        const playbooks = LocalDB.get<Playbook>(DB_KEYS.PLAYBOOKS, []);
+        const newPlaybook = { 
+            ...playbook, 
+            id: generateId(), 
+            createdAt: new Date().toISOString(), 
+            updatedAt: new Date().toISOString(),
+            blocks: playbook.blocks || []
+        } as Playbook;
+        LocalDB.set(DB_KEYS.PLAYBOOKS, [...playbooks, newPlaybook]);
+        return newPlaybook;
+    },
+
+    updatePlaybook: async (playbook: Playbook): Promise<Playbook> => {
+        if (isConfigured) {
+            const payload = {
+                title: playbook.title,
+                description: playbook.description,
+                blocks: playbook.blocks,
+                theme: playbook.theme,
+                is_published: playbook.isPublished,
+                updated_at: new Date().toISOString()
+            };
+            const { data, error } = await supabase.from('playbooks').update(payload).eq('id', playbook.id).select().single();
+            if (error) {
+                console.error("Supabase Error (Update Playbook):", error);
+                throw error;
+            }
+            return {
+                ...data,
+                clientId: data.client_id,
+                createdAt: data.created_at,
+                updatedAt: data.updated_at,
+                isPublished: data.is_published
+            };
+        }
+        const playbooks = LocalDB.get<Playbook>(DB_KEYS.PLAYBOOKS, []);
+        const updated = playbooks.map(p => p.id === playbook.id ? playbook : p);
+        LocalDB.set(DB_KEYS.PLAYBOOKS, updated);
+        return playbook;
+    },
+
+    deletePlaybook: async (id: string) => {
+        if (isConfigured) await supabase.from('playbooks').delete().eq('id', id);
+        const playbooks = LocalDB.get<Playbook>(DB_KEYS.PLAYBOOKS, []);
+        LocalDB.set(DB_KEYS.PLAYBOOKS, playbooks.filter(p => p.id !== id));
+    },
+
+    generatePlaybookStructure: async (topic: string, clientName: string): Promise<PlaybookBlock[]> => {
+        if (!process.env.API_KEY) throw new Error("API Key ausente.");
+        
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const prompt = `
+            Act as a Senior UX Writer and Technical Consultant.
+            Create a structure for a client training playbook (landing page style) for the client "${clientName}".
+            Topic: "${topic}".
+            
+            Return ONLY a valid JSON array of blocks. No markdown, no comments.
+            The structure of a block is: { type: string, content: object }.
+            
+            The available block types and their content schemas are:
+            - 'hero': { content: { title, subtitle, imageUrl } }
+            - 'text': { content: { title, content } }
+            - 'steps': { content: { title, steps: [{ title, description }] } }
+            - 'faq': { content: { title, items: [{ question, answer }] } }
+            - 'alert': { content: { type: 'info'|'warning'|'tip', message } }
+            
+            Example output:
+            [
+              { "type": "hero", "content": { "title": "Welcome", "subtitle": "Guide" } },
+              { "type": "text", "content": { "title": "Intro", "content": "..." } }
+            ]
+
+            Structure the playbook logically: Hero -> Introduction -> Step-by-Step Guide -> Important Alerts -> FAQ.
+            Make the content professional, encouraging, and specific to the requested topic.
+        `;
+
+        try {
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: prompt,
+                config: { responseMimeType: 'application/json' }
+            });
+            
+            const raw = response.text || '[]';
+            const jsonStr = raw.replace(/^```json/, '').replace(/```$/, '');
+            const blocks = JSON.parse(jsonStr);
+            
+            // Fix potential structure issues from AI and add IDs
+            return blocks.map((b: any) => {
+                // Ensure content object exists. If AI returned flat properties, wrap them.
+                if (!b.content && b.type) {
+                    const { type, id, ...rest } = b;
+                    return { id: generateId(), type: type, content: rest };
+                }
+                return { ...b, id: generateId() };
+            });
+        } catch (e) {
+            console.error("AI Generation Error", e);
+            throw new Error("Falha ao gerar estrutura com IA.");
+        }
     }
 };

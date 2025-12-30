@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Settings, PieChart, Layers, Menu, X, ChevronLeft, ChevronRight, UserCog, LogOut, Package, Hexagon } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, PieChart, Layers, Menu, X, ChevronLeft, ChevronRight, UserCog, LogOut, Package, Hexagon, BookOpen } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { TaskBoard } from './components/TaskBoard';
 import { ClientManager } from './components/ClientManager';
@@ -11,10 +11,11 @@ import { WorkflowManager } from './components/WorkflowManager';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Auth } from './components/Auth';
 import { UserManagement } from './components/UserManagement';
+import { PlaybookModule } from './components/PlaybookModule';
 import { api } from './services/api';
 import { User } from './types';
 
-type View = 'dashboard' | 'tasks' | 'clients' | 'finance' | 'settings' | 'users' | 'plans' | 'workflow';
+type View = 'dashboard' | 'tasks' | 'clients' | 'finance' | 'settings' | 'users' | 'plans' | 'workflow' | 'playbooks';
 
 const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLogout }) => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -31,6 +32,7 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
       case 'users': return <UserManagement />;
       case 'plans': return <ServicePlans />;
       case 'workflow': return <WorkflowManager />;
+      case 'playbooks': return <PlaybookModule />;
       default: return <Dashboard />;
     }
   };
@@ -126,6 +128,7 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
           <NavItem view="tasks" icon={Layers} label="Central de Tarefas" />
           {user.role !== 'client' && <NavItem view="clients" icon={Users} label="Clientes & Parceiros" />}
           {user.role !== 'client' && <NavItem view="finance" icon={PieChart} label="Fluxo de Caixa" />}
+          <NavItem view="playbooks" icon={BookOpen} label="Playbooks" />
           
           {user.role === 'admin' && (
             <>
