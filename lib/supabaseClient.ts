@@ -1,39 +1,40 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Configuration Strategy:
-// 1. Try Environment Variables (Priority for production/hosting)
-// 2. Try LocalStorage (Fallback for browser-only/demo setup)
-// 3. Fallback to placeholder (Offline Mode)
+// --- CONFIGURAÇÃO MANUAL (HARDCODED) ---
+// Se você está cansado de desconexões, cole suas credenciais aqui.
+// Elas terão prioridade sobre o LocalStorage e Variáveis de Ambiente.
+const HARDCODED_URL = ''; // Cole seu Project URL aqui (ex: https://xyz.supabase.co)
+const HARDCODED_KEY = ''; // Cole sua Anon Public Key aqui
 
 const getStoredConfig = () => {
     try {
+        // 1. Prioridade Máxima: Hardcoded no arquivo
+        if (HARDCODED_URL && HARDCODED_KEY) {
+            return { url: HARDCODED_URL, key: HARDCODED_KEY };
+        }
+
+        // 2. Ambiente (Production/Vercel)
         const envUrl = process.env.SUPABASE_URL;
         const envKey = process.env.SUPABASE_ANON_KEY;
         
-        // Check Env Vars
         if (envUrl && envUrl.startsWith('http') && envKey) {
-             if (envKey.startsWith('sb_secret') || envKey.includes('service_role')) {
-                 console.warn("SECURITY WARNING: Environment variable contains a Secret Key. Ignoring.");
-             } else {
+             if (!envKey.includes('service_role')) {
                  return { url: envUrl, key: envKey };
              }
         }
 
-        // Fallback to local storage
+        // 3. LocalStorage (Persistência no Navegador)
         const localUrl = localStorage.getItem('tuesday_supabase_url');
         const localKey = localStorage.getItem('tuesday_supabase_key');
         
         if (localUrl && localUrl.startsWith('http') && localKey) {
-            // SECURITY CHECK: Do not allow secret keys in browser
-            if (localKey.startsWith('sb_secret') || localKey.includes('service_role')) {
-                console.warn("SECURITY BLOCK: Secret Key detected in LocalStorage. Ignoring to prevent security risks. Please use the Anon/Public key.");
-                return { url: '', key: '' };
+            if (!localKey.includes('service_role')) {
+                return { url: localUrl, key: localKey };
             }
-            return { url: localUrl, key: localKey };
         }
     } catch (e) {
-        // Accessing localStorage might fail in some environments (e.g. SSR)
+        // Ignora erros de acesso (SSR, etc)
     }
     return { url: '', key: '' };
 };
@@ -42,7 +43,7 @@ const { url, key } = getStoredConfig();
 
 export const isConfigured = !!(url && key && url.startsWith('http'));
 
-// Create a single instance. 
+// Cliente Singleton
 export const supabase = createClient(
     url || 'https://placeholder.supabase.co', 
     key || 'placeholder',
@@ -50,6 +51,7 @@ export const supabase = createClient(
         auth: {
             persistSession: true,
             autoRefreshToken: true,
+            detectSessionInUrl: false // Evita conflitos de URL
         }
     }
 );
