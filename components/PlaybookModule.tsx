@@ -19,8 +19,11 @@ export const PlaybookModule: React.FC<PlaybookModuleProps> = () => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [newPlaybookTitle, setNewPlaybookTitle] = useState('');
     const [selectedClientId, setSelectedClientId] = useState('');
-    const [creationPrompt, setCreationPrompt] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+
+    // Builder AI State (Lifted or passed down)
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -37,7 +40,6 @@ export const PlaybookModule: React.FC<PlaybookModuleProps> = () => {
 
     const openCreateModal = () => {
         setNewPlaybookTitle('');
-        setCreationPrompt('');
         setSelectedClientId(clients.length > 0 ? clients[0].id : '');
         setIsCreateModalOpen(true);
     };
@@ -45,34 +47,24 @@ export const PlaybookModule: React.FC<PlaybookModuleProps> = () => {
     const handleCreate = async () => {
         if (!newPlaybookTitle.trim()) return alert("O título é obrigatório.");
         if (!selectedClientId) return alert("Selecione um cliente.");
-        if (!creationPrompt.trim()) return alert("Descreva o objetivo do playbook para a IA.");
 
         setIsCreating(true);
-        
+        const newPlaybook: Partial<Playbook> = {
+            title: newPlaybookTitle,
+            clientId: selectedClientId,
+            blocks: [],
+            theme: { primaryColor: '#4F46E5', accentColor: '#10B981' }
+        };
+
         try {
-            // 1. Generate Content via AI First
-            const clientName = clients.find(c => c.id === selectedClientId)?.name || "Cliente";
-            const generatedBlocks = await api.generatePlaybookStructure(creationPrompt, clientName);
-
-            // 2. Create the Object
-            const newPlaybook: Partial<Playbook> = {
-                title: newPlaybookTitle,
-                clientId: selectedClientId,
-                description: creationPrompt, // Save prompt as description
-                blocks: generatedBlocks, // Use generated blocks immediately
-                theme: { primaryColor: '#4F46E5', accentColor: '#10B981' }
-            };
-
-            // 3. Save to DB
             const created = await api.createPlaybook(newPlaybook);
-            
             setPlaybooks([...playbooks, created]);
             setSelectedPlaybook(created);
-            setView('builder'); // Go straight to builder to review
+            setView('builder');
             setIsCreateModalOpen(false);
         } catch (e: any) { 
             console.error(e);
-            alert("Erro ao criar playbook: " + (e.message || "Tente novamente.")); 
+            alert("Erro ao criar playbook: " + (e.message || "Erro desconhecido.")); 
         } finally {
             setIsCreating(false);
         }
@@ -83,6 +75,27 @@ export const PlaybookModule: React.FC<PlaybookModuleProps> = () => {
         if (confirm("Excluir playbook?")) {
             await api.deletePlaybook(id);
             setPlaybooks(playbooks.filter(p => p.id !== id));
+        }
+    };
+
+    const handleGenerateAI = async () => {
+        if (!aiPrompt || !selectedPlaybook) return;
+        setIsGenerating(true);
+        try {
+            const clientName = clients.find(c => c.id === selectedPlaybook.clientId)?.name || "Cliente";
+            const generatedBlocks = await api.generatePlaybookStructure(aiPrompt, clientName);
+            
+            // Ensure blocks is an array and append new ones
+            const currentBlocks = Array.isArray(selectedPlaybook.blocks) ? selectedPlaybook.blocks : [];
+            const updated = { ...selectedPlaybook, blocks: [...currentBlocks, ...generatedBlocks] };
+            
+            await api.updatePlaybook(updated);
+            setSelectedPlaybook(updated);
+            setAiPrompt('');
+        } catch (e: any) {
+            alert("Erro na geração: " + e.message);
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -104,11 +117,11 @@ export const PlaybookModule: React.FC<PlaybookModuleProps> = () => {
                 <div className="p-8">
                     <div className="flex justify-between items-center mb-8">
                         <div>
-                            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Playbooks Inteligentes</h2>
-                            <p className="text-sm text-slate-600 mt-1">Crie páginas de treinamento e documentação instantaneamente com IA.</p>
+                            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Playbooks</h2>
+                            <p className="text-sm text-slate-600 mt-1">Landing pages interativas de treinamento e documentação.</p>
                         </div>
-                        <button onClick={openCreateModal} className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center shadow-lg transition-transform hover:-translate-y-0.5">
-                            <Sparkles size={18} className="mr-2 text-yellow-300"/> Novo Playbook IA
+                        <button onClick={openCreateModal} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center shadow-lg transition-transform hover:-translate-y-0.5">
+                            <Plus size={18} className="mr-2"/> Novo Playbook
                         </button>
                     </div>
 
@@ -132,15 +145,15 @@ export const PlaybookModule: React.FC<PlaybookModuleProps> = () => {
                                     </div>
                                     <div className="flex justify-between items-center text-xs text-slate-400 mt-4 pt-4 border-t border-slate-100">
                                         <span>{Array.isArray(p.blocks) ? p.blocks.length : 0} blocos</span>
-                                        <span>{new Date(p.createdAt).toLocaleDateString()}</span>
+                                        <span>Atualizado em {new Date(p.updatedAt).toLocaleDateString()}</span>
                                     </div>
                                 </div>
                             );
                         })}
                         {playbooks.length === 0 && (
                             <div className="col-span-full py-16 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-                                <Sparkles size={48} className="mx-auto mb-4 opacity-20 text-indigo-500"/>
-                                <p>Nenhum playbook. Clique em <strong>Novo Playbook IA</strong> para começar.</p>
+                                <BookOpen size={48} className="mx-auto mb-4 opacity-20"/>
+                                <p>Nenhum playbook criado ainda.</p>
                             </div>
                         )}
                     </div>
@@ -154,6 +167,10 @@ export const PlaybookModule: React.FC<PlaybookModuleProps> = () => {
                     onSave={handleSaveBlockUpdate}
                     onPreview={() => setView('viewer')}
                     clients={clients}
+                    aiPrompt={aiPrompt}
+                    setAiPrompt={setAiPrompt}
+                    handleGenerateAI={handleGenerateAI}
+                    isGenerating={isGenerating}
                 />
             )}
 
@@ -161,63 +178,46 @@ export const PlaybookModule: React.FC<PlaybookModuleProps> = () => {
                 <PlaybookViewer playbook={selectedPlaybook} onBack={() => setView(selectedPlaybook.blocks && selectedPlaybook.blocks.length > 0 ? 'list' : 'builder')} onEdit={() => setView('builder')}/>
             )}
 
-            {/* AI Creation Modal */}
+            {/* Create Modal - Simple Manual Creation */}
             {isCreateModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !isCreating && setIsCreateModalOpen(false)}></div>
-                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-6 text-white">
-                            <h3 className="text-xl font-bold flex items-center"><Wand2 className="mr-2 text-yellow-300"/> Criador Mágico</h3>
-                            <p className="text-indigo-100 text-sm mt-1">Defina o tema e a IA construirá toda a estrutura para você.</p>
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCreateModalOpen(false)}></div>
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="text-lg font-bold text-slate-800">Novo Playbook</h3>
+                            <button onClick={() => setIsCreateModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                         </div>
-                        
-                        <div className="p-6 space-y-5">
+                        <div className="p-6 space-y-4">
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-1.5">Título do Playbook</label>
                                 <input 
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-medium" 
-                                    placeholder="Ex: Treinamento de Vendas B2B"
+                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                                    placeholder="Ex: Onboarding de Vendas"
                                     value={newPlaybookTitle}
                                     onChange={e => setNewPlaybookTitle(e.target.value)}
-                                    disabled={isCreating}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1.5">Cliente Destino</label>
+                                <label className="block text-sm font-bold text-slate-700 mb-1.5">Cliente</label>
                                 <select 
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                                     value={selectedClientId}
                                     onChange={e => setSelectedClientId(e.target.value)}
-                                    disabled={isCreating}
                                 >
                                     <option value="" disabled>Selecione um cliente...</option>
                                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1.5">O que deve conter neste Playbook?</label>
-                                <textarea 
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all h-28 resize-none"
-                                    placeholder="Ex: Crie um guia passo a passo sobre como utilizar o nosso CRM, focando em cadastro de leads e agendamento de reuniões. Inclua um FAQ no final."
-                                    value={creationPrompt}
-                                    onChange={e => setCreationPrompt(e.target.value)}
-                                    disabled={isCreating}
-                                />
+                                {clients.length === 0 && <p className="text-xs text-rose-500 mt-1">Nenhum cliente cadastrado.</p>}
                             </div>
                         </div>
-
                         <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end space-x-3">
-                            <button onClick={() => setIsCreateModalOpen(false)} disabled={isCreating} className="px-5 py-2.5 border border-slate-200 bg-white text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors disabled:opacity-50">Cancelar</button>
+                            <button onClick={() => setIsCreateModalOpen(false)} className="px-5 py-2.5 border border-slate-200 bg-white text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors">Cancelar</button>
                             <button 
                                 onClick={handleCreate} 
-                                disabled={isCreating || !newPlaybookTitle || !selectedClientId || !creationPrompt}
-                                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold hover:shadow-lg hover:from-indigo-700 hover:to-purple-700 transition-all flex items-center disabled:opacity-70 disabled:cursor-not-allowed"
+                                disabled={isCreating || !newPlaybookTitle || !selectedClientId}
+                                className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl font-bold hover:from-indigo-700 hover:to-blue-700 shadow-md transition-all flex items-center disabled:opacity-50"
                             >
-                                {isCreating ? (
-                                    <><Loader2 className="animate-spin mr-2"/> Gerando Conteúdo...</>
-                                ) : (
-                                    <><Sparkles size={18} className="mr-2"/> Gerar Automaticamente</>
-                                )}
+                                {isCreating ? <Loader2 className="animate-spin mr-2"/> : <Plus size={18} className="mr-2"/>} Criar Playbook
                             </button>
                         </div>
                     </div>
@@ -235,7 +235,11 @@ const PlaybookBuilder: React.FC<{
     onSave: (p: Playbook) => void;
     onPreview: () => void;
     clients: Client[];
-}> = ({ playbook, onBack, onSave, onPreview, clients }) => {
+    aiPrompt: string;
+    setAiPrompt: (s: string) => void;
+    handleGenerateAI: () => void;
+    isGenerating: boolean;
+}> = ({ playbook, onBack, onSave, onPreview, clients, aiPrompt, setAiPrompt, handleGenerateAI, isGenerating }) => {
     
     // Ensure blocks is always an array
     const blocks = Array.isArray(playbook?.blocks) ? playbook.blocks : [];
@@ -255,10 +259,19 @@ const PlaybookBuilder: React.FC<{
         onSave({ ...playbook, blocks: newBlocks });
     };
 
+    const addBlock = (type: string) => {
+        const newBlock: PlaybookBlock = {
+            id: Math.random().toString(36).substring(2, 9),
+            type: type as any,
+            content: { title: 'Novo Bloco', content: '' }
+        };
+        onSave({ ...playbook, blocks: [...blocks, newBlock] });
+    };
+
     return (
         <div className="flex flex-col h-full">
             {/* Toolbar */}
-            <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20">
                 <div className="flex items-center space-x-4">
                     <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"><ArrowLeft size={20}/></button>
                     <div>
@@ -291,7 +304,28 @@ const PlaybookBuilder: React.FC<{
                 {/* Canvas */}
                 <div className="flex-1 overflow-y-auto bg-slate-50 p-8 custom-scrollbar">
                     <div className="max-w-4xl mx-auto space-y-6 pb-20">
-                        {/* Removed the large AI Input Box here - functionality moved to Create Modal */}
+                        
+                        {/* AI Generator Box (Restored) */}
+                        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 rounded-2xl shadow-lg text-white mb-8">
+                            <h3 className="font-bold text-lg mb-2 flex items-center"><Sparkles size={20} className="mr-2 text-yellow-300"/> Adicionar Inteligência</h3>
+                            <p className="text-indigo-100 text-sm mb-4">Descreva o que deseja adicionar (ex: "Passo a passo de vendas") e a IA criará os blocos.</p>
+                            <div className="flex gap-2">
+                                <input 
+                                    className="flex-1 rounded-xl px-4 py-3 text-slate-900 outline-none shadow-inner"
+                                    placeholder="O que você quer criar?"
+                                    value={aiPrompt}
+                                    onChange={(e) => setAiPrompt(e.target.value)}
+                                    disabled={isGenerating}
+                                />
+                                <button 
+                                    onClick={handleGenerateAI} 
+                                    disabled={isGenerating || !aiPrompt}
+                                    className="bg-white text-indigo-600 px-6 py-3 rounded-xl font-bold hover:bg-indigo-50 disabled:opacity-50 transition-colors flex items-center"
+                                >
+                                    {isGenerating ? <Loader2 className="animate-spin"/> : 'Gerar'}
+                                </button>
+                            </div>
+                        </div>
 
                         {/* Blocks */}
                         {blocks.map((block, idx) => (
@@ -316,10 +350,19 @@ const PlaybookBuilder: React.FC<{
                             </div>
                         ))}
 
-                        {blocks.length === 0 && (
+                        {/* Manual Block Adders */}
+                        <div className="flex justify-center space-x-3 pt-6 pb-12">
+                            <button onClick={() => addBlock('hero')} className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:border-indigo-300 hover:text-indigo-600 text-sm font-bold shadow-sm transition-colors">+ Hero</button>
+                            <button onClick={() => addBlock('text')} className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:border-indigo-300 hover:text-indigo-600 text-sm font-bold shadow-sm transition-colors">+ Texto</button>
+                            <button onClick={() => addBlock('steps')} className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:border-indigo-300 hover:text-indigo-600 text-sm font-bold shadow-sm transition-colors">+ Passos</button>
+                            <button onClick={() => addBlock('alert')} className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:border-indigo-300 hover:text-indigo-600 text-sm font-bold shadow-sm transition-colors">+ Alerta</button>
+                            <button onClick={() => addBlock('faq')} className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:border-indigo-300 hover:text-indigo-600 text-sm font-bold shadow-sm transition-colors">+ FAQ</button>
+                        </div>
+
+                        {blocks.length === 0 && !isGenerating && (
                             <div className="text-center text-slate-400 py-12 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
                                 <Layout size={48} className="mx-auto mb-2 opacity-20"/>
-                                <p>O canvas está vazio.</p>
+                                <p>O canvas está vazio. Adicione blocos manualmente ou use a IA acima.</p>
                             </div>
                         )}
                     </div>
