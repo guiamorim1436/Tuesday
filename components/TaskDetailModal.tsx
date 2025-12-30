@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, Clock, CheckSquare, MessageSquare, Trash2, Save, User, Flag, ArrowRight, Paperclip, Send, Square, CheckCircle2, Loader2, Sparkles, Bot } from 'lucide-react';
+import { X, Calendar, Clock, CheckSquare, MessageSquare, Trash2, Save, User, Flag, ArrowRight, Paperclip, Send, Square, CheckCircle2, Loader2, Sparkles, Bot, Play, PauseCircle, Timer } from 'lucide-react';
 import { Task, TaskPriority, TaskStatus, Subtask, Comment } from '../types';
 import { api } from '../services/api';
 
@@ -19,6 +19,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
   const [activeTab, setActiveTab] = useState<'details' | 'comments'>('details');
   const [summary, setSummary] = useState<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  
+  // Timer State
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,6 +36,76 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
         commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [editedTask.comments, activeTab]);
+
+  // --- TIME TRACKING LOGIC ---
+  useEffect(() => {
+      // Initial Calculation
+      calculateDisplayTime();
+
+      // Setup Interval if tracking
+      if (editedTask.isTrackingTime) {
+          timerIntervalRef.current = setInterval(() => {
+              calculateDisplayTime();
+          }, 1000);
+      } else {
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      }
+
+      return () => {
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      };
+  }, [editedTask.isTrackingTime, editedTask.lastTimeLogStart, editedTask.actualHours]);
+
+  const calculateDisplayTime = () => {
+      const baseSeconds = (editedTask.actualHours || 0) * 3600;
+      let currentSessionSeconds = 0;
+      
+      if (editedTask.isTrackingTime && editedTask.lastTimeLogStart) {
+          const now = Date.now();
+          currentSessionSeconds = Math.floor((now - editedTask.lastTimeLogStart) / 1000);
+      }
+      
+      setElapsedSeconds(baseSeconds + currentSessionSeconds);
+  };
+
+  const formatTime = (totalSeconds: number) => {
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const toggleTimer = async () => {
+      const isStarting = !editedTask.isTrackingTime;
+      let updatedTask = { ...editedTask };
+
+      if (isStarting) {
+          // Start Timer
+          updatedTask.isTrackingTime = true;
+          updatedTask.lastTimeLogStart = Date.now();
+      } else {
+          // Stop Timer
+          if (updatedTask.lastTimeLogStart) {
+              const sessionDurationHours = (Date.now() - updatedTask.lastTimeLogStart) / (1000 * 60 * 60);
+              updatedTask.actualHours = (Number(updatedTask.actualHours) || 0) + sessionDurationHours;
+          }
+          updatedTask.isTrackingTime = false;
+          updatedTask.lastTimeLogStart = undefined;
+      }
+
+      setEditedTask(updatedTask);
+      
+      // Save immediately
+      try {
+          const saved = await api.updateTask(updatedTask);
+          onUpdate(saved);
+      } catch (e) {
+          console.error("Failed to toggle timer", e);
+          // Revert on error could be implemented here
+      }
+  };
+
+  // ---------------------------
 
   const handleSave = async () => {
     setIsLoading(true);
@@ -288,6 +363,35 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
 
             {/* Sidebar (Right) */}
             <div className="w-80 bg-slate-50 p-6 flex flex-col border-l border-slate-200 overflow-y-auto custom-scrollbar">
+                
+                {/* TIMER WIDGET */}
+                <div className={`mb-6 p-4 rounded-xl border transition-all ${editedTask.isTrackingTime ? 'bg-indigo-600 border-indigo-500 shadow-lg shadow-indigo-200' : 'bg-white border-slate-200 shadow-sm'}`}>
+                    <div className="flex justify-between items-center mb-2">
+                        <span className={`text-xs font-bold uppercase tracking-wider flex items-center ${editedTask.isTrackingTime ? 'text-indigo-100' : 'text-slate-500'}`}>
+                            {editedTask.isTrackingTime && <span className="w-2 h-2 rounded-full bg-rose-400 mr-2 animate-pulse"></span>}
+                            Time Tracker
+                        </span>
+                        <Timer size={16} className={editedTask.isTrackingTime ? 'text-indigo-100' : 'text-slate-400'}/>
+                    </div>
+                    <div className={`text-3xl font-mono font-bold mb-4 text-center ${editedTask.isTrackingTime ? 'text-white' : 'text-slate-700'}`}>
+                        {formatTime(elapsedSeconds)}
+                    </div>
+                    <button 
+                        onClick={toggleTimer}
+                        className={`w-full py-2.5 rounded-lg font-bold text-sm flex items-center justify-center transition-all ${
+                            editedTask.isTrackingTime 
+                            ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-md' 
+                            : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100'
+                        }`}
+                    >
+                        {editedTask.isTrackingTime ? (
+                            <><PauseCircle size={18} className="mr-2"/> Parar Timer</>
+                        ) : (
+                            <><Play size={18} className="mr-2"/> Iniciar Timer</>
+                        )}
+                    </button>
+                </div>
+
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4">Propriedades</h4>
                 
                 <div className="space-y-6">
@@ -307,8 +411,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
                     </div>
 
                     <div>
-                        <label className="flex items-center text-sm font-semibold text-slate-700 mb-1.5"><Clock size={16} className="mr-2 text-indigo-500"/> Horas Reais</label>
-                        <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none" value={editedTask.actualHours} onChange={e => setEditedTask({...editedTask, actualHours: Number(e.target.value)})} />
+                        <label className="flex items-center text-sm font-semibold text-slate-700 mb-1.5"><Clock size={16} className="mr-2 text-indigo-500"/> Horas Reais (Log)</label>
+                        <input type="number" step="0.1" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none" value={editedTask.actualHours} onChange={e => setEditedTask({...editedTask, actualHours: Number(e.target.value)})} />
                     </div>
 
                     <div>

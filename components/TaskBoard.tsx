@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Filter, Plus, Clock, X, AlignLeft, CheckSquare, Search, Loader2, Calendar as CalendarIcon, Layout, List, StretchHorizontal, ChevronLeft, ChevronRight, MoreHorizontal, User, Zap } from 'lucide-react';
+import { Filter, Plus, Clock, X, AlignLeft, CheckSquare, Search, Loader2, Calendar as CalendarIcon, Layout, List, StretchHorizontal, ChevronLeft, ChevronRight, MoreHorizontal, User, Zap, Timer } from 'lucide-react';
 import { TaskStatus, TaskPriority, Task, ServiceCategory, CustomFieldDefinition, Client } from '../types';
 import { api } from '../services/api';
 import { GoogleGenAI } from "@google/genai";
@@ -164,16 +164,28 @@ export const TaskBoard: React.FC = () => {
                        draggable
                        onDragStart={(e) => { setDraggedTaskId(task.id); e.dataTransfer.effectAllowed = 'move'; }}
                        onClick={() => setSelectedTask(task)}
-                       className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group"
+                       className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group relative"
                    >
-                       <div className="flex justify-between items-start mb-2">
+                       {task.isTrackingTime && (
+                           <div className="absolute top-4 right-4 animate-pulse">
+                               <div className="bg-rose-50 text-rose-600 border border-rose-200 rounded-full px-2 py-0.5 text-[10px] font-bold flex items-center shadow-sm">
+                                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5"></span> Rec
+                               </div>
+                           </div>
+                       )}
+                       <div className="flex justify-between items-start mb-2 pr-12">
                            <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 truncate max-w-[120px]">{getClientName(task.clientId)}</span>
-                           {getPriorityBadge(task.priority)}
                        </div>
                        <h4 className="text-sm font-semibold text-slate-800 mb-2 leading-snug group-hover:text-indigo-600 transition-colors">{task.title}</h4>
+                       
                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
-                           <div className="flex items-center text-xs text-slate-400 font-medium">
-                               <Clock size={12} className="mr-1"/> {task.startDate ? new Date(task.startDate).toLocaleDateString('pt-BR', {day:'2-digit', month:'short'}) : 'N/A'}
+                           <div className="flex items-center gap-2">
+                               <div className="flex items-center text-xs text-slate-400 font-medium">
+                                   <Clock size={12} className="mr-1"/> {task.startDate ? new Date(task.startDate).toLocaleDateString('pt-BR', {day:'2-digit', month:'short'}) : 'N/A'}
+                               </div>
+                               <div className="flex items-center">
+                                   {getPriorityBadge(task.priority)}
+                               </div>
                            </div>
                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 text-white text-[10px] flex items-center justify-center font-bold shadow-sm">
                                {task.assignee?.charAt(0)}
@@ -207,6 +219,7 @@ export const TaskBoard: React.FC = () => {
                       <tr key={t.id} onClick={() => setSelectedTask(t)} className="hover:bg-slate-50 cursor-pointer transition-colors group">
                           <td className="px-6 py-4">
                               <span className="text-sm font-semibold text-slate-800 group-hover:text-indigo-600">{t.title}</span>
+                              {t.isTrackingTime && <span className="ml-2 inline-flex items-center text-[10px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded border border-rose-100 animate-pulse"><span className="w-1.5 h-1.5 bg-rose-500 rounded-full mr-1"></span>Gravando</span>}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600">{getClientName(t.clientId)}</td>
                           <td className="px-6 py-4">
@@ -282,6 +295,7 @@ export const TaskBoard: React.FC = () => {
                                       <div className="flex justify-between items-start mb-1">
                                           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{getClientName(t.clientId)}</span>
                                           {t.status === TaskStatus.DONE && <CheckSquare size={14} className="text-emerald-500"/>}
+                                          {t.isTrackingTime && <Timer size={14} className="text-rose-500 animate-pulse"/>}
                                       </div>
                                       <h4 className="text-sm font-semibold text-slate-800 mb-2 leading-snug">{t.title}</h4>
                                       <div className="flex items-center justify-between">
@@ -346,7 +360,7 @@ export const TaskBoard: React.FC = () => {
                               <span className={`text-xs font-bold ${isToday ? 'bg-indigo-600 text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-slate-500'}`}>{date.getDate()}</span>
                               <div className="mt-1 space-y-1 overflow-y-auto max-h-[80px] custom-scrollbar">
                                   {dayTasks.map(t => (
-                                      <div key={t.id} onClick={() => setSelectedTask(t)} className={`text-[10px] px-1.5 py-1 rounded border truncate cursor-pointer ${t.priority === 'Crítica' ? 'bg-rose-50 border-rose-100 text-rose-700' : 'bg-indigo-50 border-indigo-100 text-indigo-700'}`}>
+                                      <div key={t.id} onClick={() => setSelectedTask(t)} className={`text-[10px] px-1.5 py-1 rounded border truncate cursor-pointer ${t.priority === 'Crítica' ? 'bg-rose-50 border-rose-100 text-rose-700' : 'bg-indigo-50 border-indigo-100 text-indigo-700'} ${t.isTrackingTime ? 'ring-1 ring-rose-400' : ''}`}>
                                           {t.title}
                                       </div>
                                   ))}
@@ -400,7 +414,10 @@ export const TaskBoard: React.FC = () => {
 
                       return (
                           <div key={t.id} className="flex border-b border-slate-100 hover:bg-slate-50 group">
-                              <div className="w-64 p-3 border-r border-slate-200 text-sm text-slate-700 truncate flex items-center bg-white z-10 sticky left-0 group-hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedTask(t)}>{t.title}</div>
+                              <div className="w-64 p-3 border-r border-slate-200 text-sm text-slate-700 truncate flex items-center bg-white z-10 sticky left-0 group-hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedTask(t)}>
+                                  {t.title}
+                                  {t.isTrackingTime && <span className="ml-2 w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>}
+                              </div>
                               <div className="flex-1 relative h-10">
                                   {/* Grid lines background */}
                                   <div className="absolute inset-0 flex pointer-events-none">

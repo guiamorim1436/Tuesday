@@ -231,6 +231,40 @@ export const api = {
 
     // --- AUTHENTICATION & USERS ---
     login: async (email: string, password: string): Promise<User | null> => {
+        // 1. Try Supabase First (Real Data)
+        if (isConfigured) {
+            try {
+                const { data, error } = await supabase
+                    .from('app_users')
+                    .select('*')
+                    .eq('email', email)
+                    .eq('password', password) // In production, use hash comparison
+                    .single();
+
+                if (data) {
+                    if (!data.approved) throw new Error("Conta aguardando aprovação do administrador.");
+                    
+                    const user: User = {
+                        id: data.id,
+                        name: data.name,
+                        email: data.email,
+                        role: data.role,
+                        approved: data.approved,
+                        avatar: data.avatar,
+                        linkedEntityId: data.linked_entity_id,
+                        permissions: data.permissions || {}
+                    };
+                    localStorage.setItem('tuesday_current_user', JSON.stringify(user));
+                    return user;
+                }
+            } catch (e: any) {
+                // If specific error (not just 'no rows'), throw it
+                if (e.message && e.message.includes("aprovação")) throw e;
+                // Otherwise fall through to mock check (so admin still works if DB is empty)
+            }
+        }
+
+        // 2. Fallback to Local Mock (for Demo/Admin Access if DB fails or empty)
         const defaultUsers: User[] = [{id: 'admin', name: 'Admin', email: 'admin@admin.com', password: 'admin', role: 'admin', approved: true, avatar: 'AD'}];
         let users = LocalDB.get<User>(DB_KEYS.USERS, defaultUsers);
         
