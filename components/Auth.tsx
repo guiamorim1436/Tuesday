@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Layers, Lock, Mail, User, ArrowRight, Loader2, ShieldAlert } from 'lucide-react';
+import { Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react';
 import { api } from '../services/api';
 
 interface AuthProps {
@@ -41,100 +41,167 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         }
     };
 
-    const handleDevBypass = async () => {
-        // Force creates a temporary admin session
-        const devUser = {
-            id: 'dev-admin',
-            name: 'Dev Admin',
-            email: 'dev@admin.com',
-            role: 'admin',
-            approved: true,
-            avatar: 'DV'
-        };
-        localStorage.setItem('tuesday_current_user', JSON.stringify(devUser));
-        onLogin(devUser);
-    };
-
     return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col md:flex-row max-w-4xl">
-                {/* Brand Side */}
-                <div className="bg-slate-900 p-10 flex flex-col justify-between md:w-1/2 text-white">
-                    <div>
-                        <div className="bg-indigo-500 p-2 rounded-lg w-fit mb-6">
-                            <Layers size={32} />
-                        </div>
-                        <h1 className="text-3xl font-bold mb-2">Tuesday ERP</h1>
-                        <p className="text-slate-400">Gestão centralizada para agências e consultorias.</p>
-                    </div>
-                    <div className="mt-10 md:mt-0">
-                        <p className="text-sm text-slate-500">© 2024 Tuesday Inc.</p>
-                    </div>
+        <div className="min-h-screen flex w-full bg-white overflow-hidden font-sans">
+            {/* Left Side - Visual Identity */}
+            <div className="hidden lg:flex w-1/2 relative bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600 items-center justify-center p-12 overflow-hidden">
+                {/* Decorative background shapes */}
+                <div className="absolute top-0 left-0 w-full h-full opacity-10">
+                    <div className="absolute top-10 left-10 w-64 h-64 rounded-full bg-white blur-3xl mix-blend-overlay"></div>
+                    <div className="absolute bottom-10 right-10 w-96 h-96 rounded-full bg-teal-300 blur-3xl mix-blend-overlay"></div>
                 </div>
 
-                {/* Form Side */}
-                <div className="p-10 md:w-1/2">
-                    <h2 className="text-2xl font-bold text-slate-800 mb-6">{isLogin ? 'Bem-vindo de volta' : 'Criar Conta'}</h2>
+                <div className="relative z-10 text-center text-white max-w-lg">
+                    <div className="mb-8 flex justify-center">
+                        {/* Logo Container - Expects logo.png in public folder, falls back to text/icon if missing */}
+                        <img 
+                            src="/logo.png" 
+                            alt="Tuesday Logo" 
+                            className="h-32 object-contain drop-shadow-lg"
+                            onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                const fallback = document.getElementById('logo-fallback');
+                                if(fallback) fallback.style.display = 'flex';
+                            }}
+                        />
+                        <div id="logo-fallback" className="hidden flex-col items-center">
+                            <div className="text-6xl font-bold tracking-tighter mb-2">Tuesday</div>
+                            <div className="w-16 h-1 bg-white/50 rounded-full"></div>
+                        </div>
+                    </div>
                     
-                    {error && <div className="mb-4 p-3 bg-rose-50 text-rose-600 text-sm rounded-lg">{error}</div>}
+                    <h1 className="text-4xl font-bold mb-4 tracking-tight">Gestão Inteligente para Agências</h1>
+                    <p className="text-lg text-blue-100 leading-relaxed">
+                        Centralize operações, financeiro e relacionamento em uma única plataforma escalável.
+                    </p>
+                </div>
+                
+                <div className="absolute bottom-8 text-blue-200 text-xs tracking-wider font-medium">
+                    POWERED BY TENNO HUB
+                </div>
+            </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Right Side - Form */}
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-slate-50 lg:bg-white">
+                <div className="w-full max-w-md space-y-8">
+                    <div className="text-center lg:text-left">
+                        <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
+                            {isLogin ? 'Acessar Plataforma' : 'Criar nova conta'}
+                        </h2>
+                        <p className="mt-2 text-sm text-slate-500">
+                            {isLogin ? 'Entre com suas credenciais para continuar.' : 'Preencha os dados abaixo para solicitar acesso.'}
+                        </p>
+                    </div>
+
+                    {error && (
+                        <div className="p-4 rounded-lg bg-rose-50 border border-rose-100 text-rose-600 text-sm font-medium animate-in fade-in slide-in-from-top-2">
+                            {error}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-6">
                         {!isLogin && (
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Nome Completo</label>
-                                <div className="relative">
-                                    <User className="absolute left-3 top-2.5 text-slate-400" size={18}/>
-                                    <input required type="text" className="pl-10 w-full border border-slate-300 rounded-lg py-2 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Seu Nome" value={name} onChange={e => setName(e.target.value)}/>
+                            <div className="space-y-1">
+                                <label className="block text-sm font-medium text-slate-700">Nome Completo</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+                                        <User size={18} />
+                                    </div>
+                                    <input 
+                                        required 
+                                        type="text" 
+                                        className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all" 
+                                        placeholder="Seu Nome" 
+                                        value={name} 
+                                        onChange={e => setName(e.target.value)}
+                                    />
                                 </div>
                             </div>
                         )}
                         
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                            <div className="relative">
-                                <Mail className="absolute left-3 top-2.5 text-slate-400" size={18}/>
-                                <input required type="email" className="pl-10 w-full border border-slate-300 rounded-lg py-2 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="nome@empresa.com" value={email} onChange={e => setEmail(e.target.value)}/>
+                        <div className="space-y-1">
+                            <label className="block text-sm font-medium text-slate-700">Email Corporativo</label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+                                    <Mail size={18} />
+                                </div>
+                                <input 
+                                    required 
+                                    type="email" 
+                                    className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all" 
+                                    placeholder="nome@empresa.com" 
+                                    value={email} 
+                                    onChange={e => setEmail(e.target.value)}
+                                />
                             </div>
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Senha</label>
-                            <div className="relative">
-                                <Lock className="absolute left-3 top-2.5 text-slate-400" size={18}/>
-                                <input required type="password" className="pl-10 w-full border border-slate-300 rounded-lg py-2 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)}/>
+                        <div className="space-y-1">
+                            <div className="flex justify-between items-center">
+                                <label className="block text-sm font-medium text-slate-700">Senha</label>
+                                {isLogin && <a href="#" className="text-xs font-medium text-indigo-600 hover:text-indigo-500">Esqueceu?</a>}
+                            </div>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+                                    <Lock size={18} />
+                                </div>
+                                <input 
+                                    required 
+                                    type="password" 
+                                    className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all" 
+                                    placeholder="••••••••" 
+                                    value={password} 
+                                    onChange={e => setPassword(e.target.value)}
+                                />
                             </div>
                         </div>
 
                         {!isLogin && (
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Conta</label>
-                                <select value={role} onChange={e => setRole(e.target.value)} className="w-full border border-slate-300 rounded-lg py-2 px-3 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-                                    <option value="client">Sou Cliente</option>
-                                    <option value="partner">Sou Parceiro</option>
-                                </select>
-                                <p className="text-xs text-slate-500 mt-1">Seu acesso precisará ser aprovado por um administrador.</p>
+                            <div className="space-y-1">
+                                <label className="block text-sm font-medium text-slate-700">Perfil de Acesso</label>
+                                <div className="relative">
+                                    <select value={role} onChange={e => setRole(e.target.value)} className="block w-full pl-3 pr-10 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all appearance-none">
+                                        <option value="client">Sou Cliente</option>
+                                        <option value="partner">Sou Parceiro</option>
+                                    </select>
+                                    <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-slate-500">
+                                        <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
-                        <button type="submit" disabled={isLoading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center">
-                            {isLoading ? <Loader2 className="animate-spin"/> : (isLogin ? 'Entrar' : 'Cadastrar')}
+                        <button 
+                            type="submit" 
+                            disabled={isLoading} 
+                            className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform hover:scale-[1.01] active:scale-[0.99]"
+                        >
+                            {isLoading ? <Loader2 className="animate-spin" /> : (isLogin ? 'Entrar na Plataforma' : 'Criar Conta')}
                         </button>
                     </form>
 
-                    <div className="mt-4 pt-4 border-t border-slate-100">
-                        <button 
-                            type="button"
-                            onClick={handleDevBypass}
-                            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 rounded-lg transition-colors flex items-center justify-center text-xs"
-                        >
-                            <ShieldAlert size={14} className="mr-2"/> Modo Admin (Dev Bypass)
-                        </button>
-                    </div>
+                    <div className="mt-6">
+                        <div className="relative">
+                            <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-slate-200"></div>
+                            </div>
+                            <div className="relative flex justify-center text-sm">
+                                <span className="px-2 bg-slate-50 lg:bg-white text-slate-500">Ou</span>
+                            </div>
+                        </div>
 
-                    <div className="mt-6 text-center">
-                        <button onClick={() => setIsLogin(!isLogin)} className="text-sm text-indigo-600 hover:underline font-medium">
-                            {isLogin ? 'Não tem conta? Cadastre-se' : 'Já tem conta? Faça login'}
-                        </button>
+                        <div className="mt-6 flex justify-center">
+                            <button 
+                                onClick={() => setIsLogin(!isLogin)} 
+                                className="text-sm font-medium text-indigo-600 hover:text-indigo-500 flex items-center transition-colors"
+                            >
+                                {isLogin ? 'Criar uma nova conta' : 'Já possui uma conta? Entrar'} <ArrowRight size={14} className="ml-1"/>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-8 text-center">
+                        <p className="text-xs text-slate-400">© 2025 Tenno HUB. Todos os direitos reservados.</p>
                     </div>
                 </div>
             </div>

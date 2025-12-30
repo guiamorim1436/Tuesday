@@ -57,9 +57,8 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-slate-900 text-white flex items-center justify-between px-4 z-50 shadow-md">
           <div className="flex items-center space-x-2">
-              <div className="bg-indigo-500 p-1.5 rounded-lg">
-                  <Layers size={20} className="text-white"/>
-              </div>
+              <img src="/logo.png" alt="Logo" className="h-8 w-auto rounded" onError={(e) => { e.currentTarget.style.display = 'none'; document.getElementById('mob-logo-fallback')!.style.display = 'block'; }} />
+              <div id="mob-logo-fallback" className="hidden bg-indigo-500 p-1.5 rounded-lg"><Layers size={20} className="text-white"/></div>
               <h1 className="font-bold text-lg">Tuesday</h1>
           </div>
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2">
@@ -84,13 +83,25 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
         `}
       >
         <div className={`p-6 flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'} border-b border-slate-800`}>
-          <div className="bg-indigo-500 p-2 rounded-lg flex-shrink-0">
-             <Layers size={24} className="text-white"/>
+          {/* Logo Integration in Sidebar */}
+          <div className="flex-shrink-0">
+             <img 
+                src="/logo.png" 
+                alt="Logo" 
+                className="h-8 w-auto object-contain rounded bg-white/10 p-0.5" 
+                onError={(e) => { 
+                    e.currentTarget.style.display = 'none'; 
+                    const icon = document.getElementById('sidebar-logo-fallback');
+                    if(icon) icon.style.display = 'block'; 
+                }} 
+             />
+             <div id="sidebar-logo-fallback" className="hidden bg-indigo-500 p-2 rounded-lg"><Layers size={24} className="text-white"/></div>
           </div>
+          
           {!isCollapsed && (
             <div className="overflow-hidden whitespace-nowrap">
                 <h1 className="text-xl font-bold tracking-tight">Tuesday</h1>
-                <p className="text-xs text-slate-400 capitalize">{user.role}</p>
+                <p className="text-[10px] text-slate-400 tracking-wider">TENNO HUB</p>
             </div>
           )}
         </div>
