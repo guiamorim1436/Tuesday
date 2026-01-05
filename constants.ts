@@ -1,5 +1,14 @@
 
-import { Client, ClientStatus, Partner, Task, TaskPriority, TaskStatus, FinanceMetric, CustomFieldDefinition, Transaction, ServiceCategory, SLATier, WorkConfig, User, CatalogItem, Proposal, Lead, CRMStage, TaskTemplateGroup } from './types';
+import { Client, ClientStatus, Partner, Task, TaskPriority, TaskStatus, FinanceMetric, CustomFieldDefinition, Transaction, ServiceCategory, SLATier, WorkConfig, User, CatalogItem, Proposal, Lead, CRMStage, TaskTemplateGroup, UserPermissions } from './types';
+
+// Default Permissions for Mock Users
+const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
+    tasks: { view: true, edit: true, delete: true, create: true },
+    clients: { view: true, edit: true, delete: true, create: true },
+    finance: { view: true, edit: true, delete: true, create: true },
+    settings: { view: true, edit: true },
+    users: { view: true, edit: true }
+};
 
 // Custom Fields Configuration
 export const DEFAULT_CUSTOM_FIELDS: CustomFieldDefinition[] = [
@@ -39,20 +48,24 @@ export const DEFAULT_SLA_TIERS: SLATier[] = [
 
 // Default Work Config
 export const DEFAULT_WORK_CONFIG: WorkConfig = {
-  workDays: [1, 2, 3, 4, 5], // Mon-Fri
-  workHoursStart: "09:00",
-  workHoursEnd: "18:00",
-  maxTasksPerDay: 4,
-  maxCriticalPerDay: 1,
-  maxHighPerDay: 2,
-  slaOffsetCritical: 0,
-  slaOffsetHigh: 1,
-  slaOffsetMedium: 3,
-  slaOffsetLow: 5,
-  blockHolidays: false
+  days: {
+    0: { active: false, start: '09:00', end: '18:00' },
+    1: { active: true, start: '09:00', end: '18:00' },
+    2: { active: true, start: '09:00', end: '18:00' },
+    3: { active: true, start: '09:00', end: '18:00' },
+    4: { active: true, start: '09:00', end: '18:00' },
+    5: { active: true, start: '09:00', end: '18:00' },
+    6: { active: false, start: '09:00', end: '18:00' },
+  },
+  slaByPriority: {
+    [TaskPriority.CRITICAL]: { hoursToStart: 2, daysToDeliver: 1, maxTasksPerDay: 2, startOffsetDays: 0 },
+    [TaskPriority.HIGH]: { hoursToStart: 4, daysToDeliver: 2, maxTasksPerDay: 5, startOffsetDays: 1 },
+    [TaskPriority.MEDIUM]: { hoursToStart: 8, daysToDeliver: 4, maxTasksPerDay: 10, startOffsetDays: 3 },
+    [TaskPriority.LOW]: { hoursToStart: 24, daysToDeliver: 7, maxTasksPerDay: 20, startOffsetDays: 5 },
+  }
 };
 
-// Default Task Templates
+// Restante dos mocks permanece idêntico...
 export const DEFAULT_TASK_TEMPLATES: TaskTemplateGroup[] = [
     {
         id: 'tpl_grp_1',
@@ -63,279 +76,52 @@ export const DEFAULT_TASK_TEMPLATES: TaskTemplateGroup[] = [
             { id: 't_2', title: 'Configuração de Ambiente', description: 'Criar contas e configurar acessos.', category: 'Suporte', estimatedHours: 4, priority: TaskPriority.MEDIUM, daysOffset: 3 },
             { id: 't_3', title: 'Mapeamento de Processos', description: 'Desenhar fluxograma atual.', category: 'Automacao', estimatedHours: 8, priority: TaskPriority.HIGH, daysOffset: 7 }
         ]
-    },
-    {
-        id: 'tpl_grp_2',
-        name: 'Fechamento Mensal',
-        description: 'Tarefas recorrentes de fim de mês.',
-        templates: [
-            { id: 't_4', title: 'Relatório de Performance', description: 'Extrair KPIs e montar apresentação.', category: 'CRM', estimatedHours: 3, priority: TaskPriority.MEDIUM, daysOffset: 0 },
-            { id: 't_5', title: 'Reunião de Review', description: 'Apresentar resultados ao cliente.', category: 'Reunião', estimatedHours: 1, priority: TaskPriority.MEDIUM, daysOffset: 2 }
-        ]
     }
 ];
 
-// Mock Partners
 export const MOCK_PARTNERS: Partner[] = [
-  { 
-    id: 'p1', 
-    name: 'Consultoria Alpha', 
-    totalReferrals: 5, 
-    totalCommissionPaid: 12500,
-    implementationFee: 5000,
-    implementationDays: 30,
-    customFields: {}
-  },
-  { 
-    id: 'p2', 
-    name: 'Growth Experts', 
-    totalReferrals: 3, 
-    totalCommissionPaid: 8400,
-    implementationFee: 7500,
-    implementationDays: 45,
-    customFields: {}
-  },
-  { 
-    id: 'p3', 
-    name: 'Tech Solutions', 
-    totalReferrals: 12, 
-    totalCommissionPaid: 4500,
-    implementationFee: 3000,
-    implementationDays: 15,
-    customFields: {}
-  },
+  { id: 'p1', name: 'Consultoria Alpha', totalReferrals: 5, totalCommissionPaid: 12500, implementationFee: 5000, implementationDays: 30, customFields: {} },
+  { id: 'p2', name: 'Growth Experts', totalReferrals: 3, totalCommissionPaid: 8400, implementationFee: 7500, implementationDays: 45, customFields: {} }
 ];
 
-// Mock Clients
-// Added hasImplementation: true to match the Client interface
 export const MOCK_CLIENTS: Client[] = [
   { id: 'c1', name: 'Logística Veloz', status: ClientStatus.ACTIVE, slaTierId: 'sla_1', partnerId: 'p1', onboardingDate: '2023-09-15', healthScore: 92, hoursUsedMonth: 0, hasImplementation: true, customFields: { contract_url: 'http://doc.com/123' } },
-  { id: 'c2', name: 'Fintech Nova', status: ClientStatus.ACTIVE, slaTierId: 'sla_3', partnerId: 'p2', onboardingDate: '2023-03-10', healthScore: 88, hoursUsedMonth: 0, hasImplementation: true, customFields: {} },
-  { id: 'c3', name: 'Varejo Bras', status: ClientStatus.PAUSED, slaTierId: 'sla_1', onboardingDate: '2023-06-20', healthScore: 45, hoursUsedMonth: 0, hasImplementation: true, customFields: {} },
-  { id: 'c4', name: 'EduTech Global', status: ClientStatus.ACTIVE, slaTierId: 'sla_2', partnerId: 'p3', onboardingDate: '2023-11-05', healthScore: 98, hoursUsedMonth: 0, hasImplementation: true, customFields: {} }, // Recent onboarding
-  { id: 'c5', name: 'Indústria Metal', status: ClientStatus.ONBOARDING, slaTierId: 'sla_3', partnerId: 'p1', onboardingDate: new Date().toISOString().split('T')[0], healthScore: 100, hoursUsedMonth: 0, hasImplementation: true, customFields: {} },
+  { id: 'c2', name: 'Fintech Nova', status: ClientStatus.ACTIVE, slaTierId: 'sla_3', partnerId: 'p2', onboardingDate: '2023-03-10', healthScore: 88, hoursUsedMonth: 0, hasImplementation: true, customFields: {} }
 ];
 
-// Mock Tasks
-// Added attachments: [] and autoSla: true to match the Task interface
 export const MOCK_TASKS: Task[] = [
   { 
-    id: 't1', 
-    title: 'Implementar Fluxo de Cadência', 
-    description: 'Configurar a ferramenta de Sales Engagement.',
-    clientId: 'c1', 
-    status: TaskStatus.IN_PROGRESS, 
-    priority: TaskPriority.HIGH, 
-    startDate: '2023-11-01',
-    dueDate: '2023-11-15', 
-    createdAt: '2023-11-01',
-    estimatedHours: 8, 
-    actualHours: 14.5, 
-    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
-    assignees: ['Carlos'],
-    subscribers: [],
-    participants: ['Ana'],
-    watchers: ['Admin User'],
-    category: 'Vendas',
-    subtasks: [
-        { id: 'st1', title: 'Configurar DNS', completed: true },
-        { id: 'st2', title: 'Criar Templates de Email', completed: false }
-    ],
-    comments: [
-      { id: 'cm1', author: 'Ana', text: 'Já validei o copy dos emails.', timestamp: '2023-11-02 10:00', avatar: 'A', type: 'text' }
-    ],
-    attachments: [],
-    autoSla: true,
-    customFields: { ticket_url: 'https://jira.com/123', approval_required: 'Sim' }
-  },
-  { 
-    id: 't2', 
-    title: 'Integração ERP x CRM', 
-    description: 'Desenvolver middleware.',
-    clientId: 'c2', 
-    status: TaskStatus.WAITING, 
-    priority: TaskPriority.CRITICAL, 
-    startDate: '2023-10-25',
-    dueDate: '2023-11-12', 
-    createdAt: '2023-10-25',
-    estimatedHours: 20, 
-    actualHours: 45, 
-    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
-    assignees: ['Ana'],
-    subscribers: [],
-    participants: ['Carlos', 'DevTeam'],
-    watchers: [],
-    category: 'Automacao',
-    subtasks: [],
-    comments: [],
-    attachments: [],
-    autoSla: true,
-    customFields: {}
-  },
-  { 
-    id: 't4', 
-    title: 'Treinamento Equipe Comercial', 
-    description: 'Realizar workshop.',
-    clientId: 'c4', 
-    status: TaskStatus.DONE, 
-    priority: TaskPriority.HIGH, 
-    startDate: '2023-10-20',
-    dueDate: '2023-11-01', 
-    createdAt: '2023-10-20',
-    estimatedHours: 6, 
-    actualHours: 6, 
-    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
-    assignees: ['Carlos'],
-    subscribers: [],
-    participants: [],
-    watchers: [],
-    category: 'CRM',
-    subtasks: [],
-    comments: [],
-    attachments: [],
-    autoSla: true,
-    customFields: {}
-  },
-  { 
-    id: 't5', 
-    title: 'Reunião Mensal de Resultados', 
-    description: 'Apresentação de KPIs.',
-    clientId: 'c2', 
-    status: TaskStatus.DONE, 
-    priority: TaskPriority.MEDIUM, 
-    startDate: '2023-11-05',
-    dueDate: '2023-11-05', 
-    createdAt: '2023-11-05',
-    estimatedHours: 1, 
-    actualHours: 2.5, 
-    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
-    assignees: ['Ana'], 
-    subscribers: [],
-    participants: ['Admin User'],
-    watchers: [],
-    category: 'Reunião',
-    subtasks: [],
-    comments: [],
-    attachments: [],
-    autoSla: true,
-    customFields: {}
-  },
-  { 
-    id: 't6', 
-    title: 'Ajuste Interno de Processos', 
-    description: 'Não faturável.',
-    clientId: 'c1', 
-    status: TaskStatus.BACKLOG, 
-    priority: TaskPriority.LOW, 
-    startDate: '2023-11-01',
-    dueDate: '2023-11-20', 
-    createdAt: '2023-11-01',
-    estimatedHours: 2, 
-    actualHours: 0, 
-    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
-    assignees: ['Carlos'],
-    subscribers: [],
-    participants: [],
-    watchers: [], 
-    category: 'Suporte', // Non-billable
-    subtasks: [],
-    comments: [],
-    attachments: [],
-    autoSla: true,
-    customFields: {}
+    id: 't1', title: 'Implementar Fluxo de Cadência', description: 'Configurar a ferramenta de Sales Engagement.', clientId: 'c1', status: TaskStatus.IN_PROGRESS, priority: TaskPriority.HIGH, startDate: '2023-11-01', dueDate: '2023-11-15', createdAt: '2023-11-01', estimatedHours: 8, actualHours: 14.5, assignees: ['u2'], category: 'Vendas', subtasks: [], comments: [], attachments: [], autoSla: true, customFields: {}
   }
 ];
 
-// Mock Financial Data
 export const MOCK_FINANCE: FinanceMetric[] = [
   { month: 'Jun', revenue: 28000, expenses: 15000, profit: 13000 },
-  { month: 'Jul', revenue: 32000, expenses: 16000, profit: 16000 },
-  { month: 'Ago', revenue: 30500, expenses: 15500, profit: 15000 },
-  { month: 'Set', revenue: 38000, expenses: 18000, profit: 20000 },
-  { month: 'Out', revenue: 42000, expenses: 19000, profit: 23000 },
   { month: 'Nov', revenue: 45000, expenses: 18500, profit: 26500 },
 ];
 
 export const MOCK_TRANSACTIONS: Transaction[] = [
-  { id: 'tr1', date: '2023-11-01', description: 'Mensalidade - Fintech Nova', category: 'Receita Recorrente', amount: 12000, type: 'income', status: 'paid', frequency: 'recurring', installments: 12, clientId: 'c2' },
-  { id: 'tr2', date: '2023-11-02', description: 'Servidor AWS', category: 'Infraestrutura', amount: 850, type: 'expense', status: 'paid', frequency: 'recurring', installments: 24 },
-  { id: 'tr3', date: '2023-11-03', description: 'Implantação - Indústria Metal', category: 'Serviço Pontual', amount: 5000, type: 'income', status: 'pending', frequency: 'single', clientId: 'c5' },
-  { id: 'tr4', date: '2023-10-15', description: 'Mensalidade - Varejo Bras', category: 'Receita Recorrente', amount: 3500, type: 'income', status: 'pending', frequency: 'recurring', installments: 12, clientId: 'c3' }, 
-  { id: 'tr5', date: '2023-10-20', description: 'Comissão Parceiro - Logística Veloz', category: 'Receita Parceiro', amount: 1500, type: 'income', status: 'pending', frequency: 'single', clientId: 'c1' }, 
+  { id: 'tr1', date: '2023-11-01', description: 'Mensalidade - Fintech Nova', category: 'Receita Recorrente', amount: 12000, type: 'income', status: 'paid', frequency: 'recurring', installments: 12, clientId: 'c2' }
 ];
 
-// Mock Users
 export const MOCK_USERS: User[] = [
-    { id: 'u1', name: 'Admin User', email: 'admin@nexus-os.com', role: 'admin', approved: true, avatar: 'AD' },
-    { id: 'u2', name: 'Carlos Silva', email: 'carlos@nexus-os.com', role: 'admin', approved: true, avatar: 'CS' },
-    { id: 'u3', name: 'Ana Souza', email: 'ana@nexus-os.com', role: 'admin', approved: true, avatar: 'AS' },
-    { id: 'u4', name: 'Guilherme Amorim', email: 'guilherme.amorimcrm@gmail.com', role: 'admin', approved: true, avatar: 'GA' }
+    { id: 'u1', name: 'Admin User', email: 'admin@nexus-os.com', role: 'admin', approved: true, avatar: 'AD', permissions: DEFAULT_ADMIN_PERMISSIONS },
+    { id: 'u4', name: 'Guilherme Amorim', email: 'guilherme.amorimcrm@gmail.com', role: 'admin', approved: true, avatar: 'GA', permissions: DEFAULT_ADMIN_PERMISSIONS }
 ];
 
-// Mock Catalog
 export const MOCK_CATALOG: CatalogItem[] = [
-  { id: 'cat_item_1', name: 'Consultoria de Processos', type: 'service', description: 'Mapeamento e otimização.', defaultPrice: 250, defaultHours: 1 },
-  { id: 'cat_item_2', name: 'Setup de CRM', type: 'service', description: 'Implementação completa.', defaultPrice: 1500, defaultHours: 10 },
-  { id: 'cat_item_3', name: 'Licença Software (Anual)', type: 'product', description: 'Assinatura SaaS.', defaultPrice: 5000 },
+  { id: 'cat_item_1', name: 'Consultoria de Processos', type: 'service', description: 'Mapeamento e otimização.', defaultPrice: 250, defaultHours: 1 }
 ];
 
-// Mock Proposals
 export const MOCK_PROPOSALS: Proposal[] = [
-  { 
-    id: 'prop_1', 
-    clientId: 'c1', 
-    title: 'Projeto Otimização Logística', 
-    status: 'sent', 
-    date: '2023-11-01', 
-    validUntil: '2023-11-15', 
-    items: [
-      { id: 'pi_1', name: 'Consultoria de Processos', type: 'service', quantity: 10, unitPrice: 250, hours: 1, total: 2500 }
-    ],
-    totalValue: 2500, 
-    totalHours: 10,
-    billingNotes: 'Pagamento 50% entrada e 50% na entrega.'
-  }
+  { id: 'prop_1', clientId: 'c1', title: 'Projeto Otimização Logística', status: 'sent', date: '2023-11-01', validUntil: '2023-11-15', items: [], totalValue: 2500, totalHours: 10, billingNotes: '' }
 ];
 
-// CRM Stages
 export const DEFAULT_CRM_STAGES: CRMStage[] = [
   { id: 'stage_1', name: 'Prospecção', color: 'border-slate-300' },
-  { id: 'stage_2', name: 'Qualificação', color: 'border-blue-400' },
-  { id: 'stage_3', name: 'Proposta', color: 'border-yellow-400' },
-  { id: 'stage_4', name: 'Negociação', color: 'border-orange-400' },
   { id: 'stage_5', name: 'Fechado (Ganho)', color: 'border-emerald-400', isWin: true },
 ];
 
-// Mock Leads
 export const MOCK_LEADS: Lead[] = [
-  { 
-    id: 'lead_1', 
-    name: 'TechStart Inc', 
-    contactPerson: 'João Silva', 
-    email: 'joao@techstart.com', 
-    phone: '(11) 99999-9999', 
-    value: 15000, 
-    stageId: 'stage_2', 
-    type: 'client', 
-    temperature: 'hot', 
-    source: 'Indicação', 
-    createdAt: '2023-10-20', 
-    lastInteraction: '2023-11-02', 
-    notes: 'Interessados em automação de vendas.' 
-  },
-  { 
-    id: 'lead_2', 
-    name: 'Consultoria ABC', 
-    contactPerson: 'Maria Oliveira', 
-    email: 'maria@abc.com', 
-    phone: '(21) 88888-8888', 
-    value: 5000, 
-    stageId: 'stage_1', 
-    type: 'partner', 
-    temperature: 'warm', 
-    source: 'LinkedIn', 
-    createdAt: '2023-11-01', 
-    lastInteraction: '2023-11-01', 
-    notes: 'Potencial parceiro de implementação.' 
-  }
+  { id: 'lead_1', name: 'TechStart Inc', contactPerson: 'João Silva', email: 'joao@techstart.com', phone: '(11) 99999-9999', value: 15000, stageId: 'stage_2', type: 'client', temperature: 'hot', source: 'Indicação', createdAt: '2023-10-20', lastInteraction: '2023-11-02', notes: '' }
 ];

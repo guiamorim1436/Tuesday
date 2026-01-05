@@ -1,273 +1,149 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Check, X, Shield, Building, Clock, Plus, Save, Edit2 } from 'lucide-react';
+import { Shield, Check, X, UserCog, Loader2, Save, Trash2, Edit2, Lock, Eye, Plus, Clock } from 'lucide-react';
+import { User, UserPermissions } from '../types';
 import { api } from '../services/api';
-import { User as UserType, Client, Partner } from '../types';
 
 export const UserManagement: React.FC = () => {
-    const [users, setUsers] = useState<UserType[]>([]);
-    const [clients, setClients] = useState<Client[]>([]);
-    const [partners, setPartners] = useState<Partner[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-    
-    // User State
-    const [currentUser, setCurrentUser] = useState<Partial<UserType>>({
-        name: '',
-        email: '',
-        role: 'client',
-        password: '', 
-        linkedEntityId: '',
-        permissions: { canDelete: false, viewFinance: false, manageUsers: false }
+    const [currentUser, setCurrentUser] = useState<Partial<User>>({
+        permissions: {
+            tasks: { view: true, edit: true, delete: false },
+            clients: { view: true, edit: false, delete: false },
+            finance: { view: false, edit: false, delete: false },
+            settings: { view: false, edit: false }
+        }
     });
 
-    useEffect(() => {
-        loadData();
-    }, []);
+    useEffect(() => { loadData(); }, []);
 
     const loadData = async () => {
-        const [u, c, p] = await Promise.all([
-            api.getUsers(),
-            api.getClients(),
-            api.getPartners()
-        ]);
-        setUsers(u);
-        setClients(c);
-        setPartners(p);
-    };
-
-    const handleOpenModal = (user?: UserType) => {
-        if (user) {
-            setModalMode('edit');
-            setCurrentUser({ ...user, password: '' }); // Don't show password
-        } else {
-            setModalMode('create');
-            setCurrentUser({ 
-                name: '', email: '', role: 'client', password: '', linkedEntityId: '',
-                permissions: { canDelete: false, viewFinance: false, manageUsers: false }
-            });
-        }
-        setIsModalOpen(true);
-    };
-
-    const handleSaveUser = async () => {
-        if (!currentUser.name || !currentUser.email) return alert('Nome e Email são obrigatórios');
-        
+        setIsLoading(true);
         try {
-            if (modalMode === 'create') {
-                const created = await api.createUser(currentUser);
-                setUsers([created, ...users]);
-            } else {
-                if (!currentUser.id) return;
-                // If password is empty, don't send it to update logic (handled in backend usually, here simplified)
-                const updated = await api.updateUser(currentUser as UserType);
-                setUsers(users.map(u => u.id === updated.id ? updated : u));
-            }
-            setIsModalOpen(false);
-        } catch (e: any) {
-            alert("Erro ao salvar usuário: " + e.message);
-        }
+            const u = await api.getUsers();
+            setUsers(u);
+        } finally { setIsLoading(false); }
     };
 
-    const handleApprove = async (user: UserType) => {
-        await api.updateUser({ ...user, approved: true });
-        loadData();
+    const togglePermission = (module: keyof UserPermissions, action: string) => {
+        const perms = { ...currentUser.permissions } as any;
+        perms[module][action] = !perms[module][action];
+        setCurrentUser({ ...currentUser, permissions: perms });
     };
 
-    const togglePermission = (key: string) => {
-        // Fix: provide a complete default permissions object to satisfy the type requirement
-        const currentPerms = currentUser.permissions || { canDelete: false, viewFinance: false, manageUsers: false };
-        setCurrentUser({
-            ...currentUser,
-            permissions: { ...currentPerms, [key as keyof typeof currentPerms]: !currentPerms[key as keyof typeof currentPerms] }
-        });
-    };
+    if (isLoading) return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>;
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
-            <div className="px-6 py-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+        <div className="flex flex-col h-full bg-[#F3F4F6]">
+            <div className="bg-white border-b border-slate-200 px-8 py-6 flex justify-between items-center sticky top-0 z-20 shadow-sm">
                 <div>
-                    <h3 className="font-bold text-slate-800 text-lg">Gestão de Usuários e Acessos</h3>
-                    <p className="text-sm text-slate-500">Aprove cadastros e defina permissões granulares</p>
+                    <h2 className="text-2xl font-bold text-slate-900">Gestão de Governança</h2>
+                    <p className="text-sm text-slate-500 font-medium">Controle de acessos e permissões granulares</p>
                 </div>
-                <button 
-                    onClick={() => handleOpenModal()}
-                    className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm"
-                >
-                    <Plus size={16} /> <span>Novo Usuário</span>
-                </button>
+                <button onClick={() => { setCurrentUser({ permissions: { tasks: { view: true, edit: false, delete: false }, clients: { view: false, edit: false, delete: false }, finance: { view: false, edit: false, delete: false }, settings: { view: false, edit: false } } as any }); setIsModalOpen(true); }} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2"><Plus size={18}/> Novo Usuário</button>
             </div>
-            
-            <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
-                        <tr>
-                            <th className="px-6 py-4">Usuário</th>
-                            <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4">Perfil (Role)</th>
-                            <th className="px-6 py-4">Vínculo</th>
-                            <th className="px-6 py-4 text-right">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                        {users.map(user => (
-                            <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center">
-                                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold mr-3 border border-indigo-200">
-                                            {user.name.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <div className="text-sm font-bold text-slate-900">{user.name}</div>
-                                            <div className="text-xs text-slate-500">{user.email}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    {user.approved ? 
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200"><Check size={12} className="mr-1"/> Aprovado</span> :
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><Clock size={12} className="mr-1"/> Pendente</span>
-                                    }
-                                </td>
-                                <td className="px-6 py-4">
-                                    <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>
-                                        {user.role}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-sm text-slate-600">
-                                    {user.role === 'partner' && partners.find(p => p.id === user.linkedEntityId)?.name}
-                                    {user.role === 'client' && clients.find(c => c.id === user.linkedEntityId)?.name}
-                                    {user.role === 'admin' && 'Global'}
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <div className="flex justify-end space-x-2">
-                                        {!user.approved && (
-                                            <button onClick={() => handleApprove(user)} className="text-emerald-700 hover:text-emerald-900 font-bold text-xs border border-emerald-300 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors">
-                                                Aprovar
-                                            </button>
-                                        )}
-                                        <button onClick={() => handleOpenModal(user)} className="text-slate-400 hover:text-indigo-600 p-2 rounded-lg hover:bg-slate-100 transition-colors">
-                                            <Edit2 size={16}/>
-                                        </button>
-                                    </div>
-                                </td>
+
+            <div className="p-8 h-full overflow-y-auto custom-scrollbar">
+                <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                    <table className="w-full text-left">
+                        <thead className="bg-slate-50/50 border-b border-slate-100">
+                            <tr>
+                                <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Usuário</th>
+                                <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Perfil</th>
+                                <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Status</th>
+                                <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Ações</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {users.map(u => (
+                                <tr key={u.id} className="hover:bg-slate-50/50 transition-colors group">
+                                    <td className="px-8 py-5">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center font-black text-indigo-700 uppercase border border-indigo-200">{u.name.charAt(0)}</div>
+                                            <div>
+                                                <p className="font-bold text-slate-800 text-sm">{u.name}</p>
+                                                <p className="text-xs text-slate-400 font-medium">{u.email}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-5">
+                                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg border uppercase ${u.role === 'admin' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-slate-50 text-slate-400'}`}>{u.role}</span>
+                                    </td>
+                                    <td className="px-8 py-5">
+                                        {u.approved ? 
+                                            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600"><Check size={14}/> Aprovado</span> :
+                                            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-500"><Clock size={14}/> Pendente</span>
+                                        }
+                                    </td>
+                                    <td className="px-8 py-5 text-right">
+                                        <button className="p-2 text-slate-400 hover:text-indigo-600 transition-colors opacity-0 group-hover:opacity-100"><Edit2 size={16}/></button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            {/* CREATE/EDIT USER MODAL */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
-                    <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="text-lg font-bold text-slate-800">{modalMode === 'create' ? 'Novo Usuário' : 'Editar Usuário'}</h3>
-                            <button onClick={() => setIsModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+                    <div className="relative bg-white rounded-[40px] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-in zoom-in-95">
+                        <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3"><Shield className="text-indigo-600"/> Perfil de Governança</h3>
+                                <p className="text-sm text-slate-500 font-medium">Defina exatamente o que este usuário pode ver ou fazer</p>
+                            </div>
+                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white rounded-xl transition-all"><X size={28}/></button>
                         </div>
-                        
-                        <div className="p-6 space-y-5 overflow-y-auto">
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Nome Completo</label>
-                                    <input 
-                                        className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                                        value={currentUser.name} 
-                                        onChange={e => setCurrentUser({...currentUser, name: e.target.value})}
-                                        placeholder="Ex: João Silva"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Email Corporativo</label>
-                                    <input 
-                                        type="email"
-                                        className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-slate-50 disabled:text-slate-500" 
-                                        value={currentUser.email} 
-                                        onChange={e => setCurrentUser({...currentUser, email: e.target.value})}
-                                        placeholder="joao@empresa.com"
-                                        disabled={modalMode === 'edit'} // Prevent email change for consistency
-                                    />
-                                </div>
-                                {modalMode === 'create' && (
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">Senha Provisória</label>
-                                        <input 
-                                            type="text"
-                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                                            value={currentUser.password} 
-                                            onChange={e => setCurrentUser({...currentUser, password: e.target.value})}
-                                            placeholder="Mínimo 6 caracteres"
-                                        />
-                                    </div>
-                                )}
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">Perfil de Acesso</label>
-                                        <select 
-                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                            value={currentUser.role}
-                                            onChange={e => setCurrentUser({...currentUser, role: e.target.value as any, linkedEntityId: ''})}
-                                        >
-                                            <option value="client">Cliente</option>
-                                            <option value="partner">Parceiro</option>
-                                            <option value="admin">Administrador</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">Vínculo</label>
-                                        <select 
-                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-slate-100 disabled:text-slate-400"
-                                            value={currentUser.linkedEntityId || ''}
-                                            onChange={e => setCurrentUser({...currentUser, linkedEntityId: e.target.value})}
-                                            disabled={currentUser.role === 'admin'}
-                                        >
-                                            <option value="">Selecione...</option>
-                                            {currentUser.role === 'client' && clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                            {currentUser.role === 'partner' && partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                        </select>
-                                    </div>
+
+                        <div className="flex-1 overflow-y-auto p-10 custom-scrollbar grid grid-cols-1 md:grid-cols-2 gap-10">
+                            <div className="space-y-6">
+                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Informações Básicas</h4>
+                                <div className="space-y-4">
+                                    <input className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" placeholder="Nome Completo"/>
+                                    <input className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" placeholder="Email Corporativo"/>
+                                    <select className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold">
+                                        <option value="client">Perfil: Cliente</option>
+                                        <option value="partner">Perfil: Parceiro</option>
+                                        <option value="admin">Perfil: Administrador</option>
+                                    </select>
                                 </div>
                             </div>
 
-                            {/* Detailed Permissions Section */}
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center"><Shield size={14} className="mr-2 text-indigo-600"/> Permissões Granulares</h4>
-                                <div className="space-y-2">
-                                    <label className="flex items-center space-x-3 cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
-                                            checked={currentUser.permissions?.canDelete || false}
-                                            onChange={() => togglePermission('canDelete')}
-                                        />
-                                        <span className="text-sm text-slate-700">Pode excluir registros (Task, Cliente, etc)</span>
-                                    </label>
-                                    <label className="flex items-center space-x-3 cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
-                                            checked={currentUser.permissions?.viewFinance || false}
-                                            onChange={() => togglePermission('viewFinance')}
-                                        />
-                                        <span className="text-sm text-slate-700">Acesso ao Módulo Financeiro</span>
-                                    </label>
-                                    <label className="flex items-center space-x-3 cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
-                                            checked={currentUser.permissions?.manageUsers || false}
-                                            onChange={() => togglePermission('manageUsers')}
-                                        />
-                                        <span className="text-sm text-slate-700">Gestão de Usuários</span>
-                                    </label>
+                            <div className="space-y-6">
+                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Matriz de Permissões</h4>
+                                <div className="space-y-3">
+                                    {Object.entries(currentUser.permissions || {}).map(([module, actions]) => (
+                                        <div key={module} className="bg-slate-50 p-6 rounded-[24px] border border-slate-100">
+                                            <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <Lock size={12} className="text-indigo-600"/> {module === 'tasks' ? 'Operações' : module === 'clients' ? 'Clientes' : module === 'finance' ? 'Financeiro' : 'Configurações'}
+                                            </h5>
+                                            <div className="flex flex-wrap gap-4">
+                                                {Object.entries(actions).map(([action, active]) => (
+                                                    <button 
+                                                        key={action}
+                                                        onClick={() => togglePermission(module as any, action)}
+                                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                                                            active ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-400'
+                                                        }`}
+                                                    >
+                                                        {active ? <Check size={12}/> : <Eye size={12}/>}
+                                                        {action === 'view' ? 'Ver' : action === 'edit' ? 'Editar' : 'Excluir'}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-3">
-                            <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors">Cancelar</button>
-                            <button onClick={handleSaveUser} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 flex items-center transition-colors shadow-sm"><Save size={18} className="mr-2"/>Salvar Usuário</button>
+                        <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-4">
+                            <button onClick={() => setIsModalOpen(false)} className="px-8 py-3 text-slate-600 font-bold hover:bg-white rounded-2xl transition-all">Cancelar</button>
+                            <button className="px-10 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-600/30 flex items-center gap-2"><Save size={18}/> Salvar Credenciais</button>
                         </div>
                     </div>
                 </div>

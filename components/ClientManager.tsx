@@ -6,6 +6,7 @@ import { api } from '../services/api';
 import { DEFAULT_TASK_TEMPLATES } from '../constants';
 import { exportToCSV } from '../services/csvHelper';
 import { CSVImporter } from './CSVImporter';
+import { ClientDetailModal } from './ClientDetailModal';
 
 export const ClientManager: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -18,28 +19,9 @@ export const ClientManager: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPartner, setFilterPartner] = useState<string>('all');
   const [slaTiers, setSlaTiers] = useState<SLATier[]>([]);
-  const [taskTemplates] = useState<TaskTemplateGroup[]>(DEFAULT_TASK_TEMPLATES); 
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  
-  const [editingClient, setEditingClient] = useState<Partial<Client>>({ name: '', status: ClientStatus.ONBOARDING, hasImplementation: true, customFields: {} });
-  const [editingPartner, setEditingPartner] = useState<Partial<Partner>>({ name: '', customFields: {} });
-  
-  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-  const [selectedClientForTemplate, setSelectedClientForTemplate] = useState<Client | null>(null);
-
-  const importFields = useMemo(() => activeTab === 'clients' ? [
-      { key: 'name', label: 'Nome', required: true },
-      { key: 'status', label: 'Status' },
-      { key: 'onboardingDate', label: 'Data Início (YYYY-MM-DD)' },
-      { key: 'slaTierId', label: 'ID do Plano' },
-      { key: 'healthScore', label: 'Health Score (0-100)' }
-  ] : [
-      { key: 'name', label: 'Nome', required: true },
-      { key: 'implementationFee', label: 'Taxa Impl. (R$)' },
-      { key: 'implementationDays', label: 'Dias Impl.' },
-      { key: 'totalReferrals', label: 'Indicações' }
-  ], [activeTab]);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   useEffect(() => {
     loadData();
@@ -72,110 +54,14 @@ export const ClientManager: React.FC = () => {
 
   const filteredPartners = partners.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  const toggleSelection = (id: string) => {
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
-    setSelectedIds(newSet);
-  };
-
-  const toggleSelectAll = () => {
-      const list = activeTab === 'clients' ? filteredClients : filteredPartners;
-      if (selectedIds.size === list.length) {
-          setSelectedIds(new Set());
-      } else {
-          setSelectedIds(new Set(list.map(i => i.id)));
-      }
-  };
-
-  const handleBulkDelete = async () => {
-      if (!confirm(`Excluir ${selectedIds.size} itens?`)) return;
-      const ids = Array.from(selectedIds) as string[];
-      if (activeTab === 'clients') {
-          await api.deleteClientsBulk(ids);
-          setClients(clients.filter(c => !selectedIds.has(c.id)));
-      } else {
-          await api.deletePartnersBulk(ids);
-          setPartners(partners.filter(p => !selectedIds.has(p.id)));
-      }
-      setSelectedIds(new Set());
-  };
-
-  const handleDeletePartner = async (id: string) => {
-    if (!confirm('Excluir este parceiro?')) return;
-    try {
-      await api.deletePartner(id);
-      setPartners(partners.filter(p => p.id !== id));
-    } catch (e: any) {
-      console.error(e);
-      alert('Erro ao excluir parceiro.');
-    }
-  };
-
-  const handleExportCSV = () => {
-      if (activeTab === 'clients') exportToCSV(filteredClients, 'clientes');
-      else exportToCSV(filteredPartners, 'parceiros');
-  };
-
-  const handleImportData = async (data: any[]) => {
-      try {
-          if (activeTab === 'clients') {
-              const newClients = await api.createClientsBulk(data);
-              setClients([...newClients, ...clients]);
-          } else {
-              const newPartners = await api.createPartnersBulk(data);
-              setPartners([...newPartners, ...partners]);
-          }
-          loadData(); 
-      } catch (e) {
-          console.error(e);
-          alert('Erro na importação');
-      }
-  };
-  
-  const getClientPhase = (client: Client, partner?: Partner) => {
-    if (!client.hasImplementation) return { phase: 'contract', daysLeft: 0, label: 'Contrato Ativo' };
-    
-    if (!partner) return { phase: 'contract', daysLeft: 0, label: 'Contrato (S/ Parceiro)' };
-    const startDate = new Date(client.onboardingDate);
-    const now = new Date();
-    const impDays = partner.implementationDays || 0;
-    const supportDays = 15;
-    const impEndDate = new Date(startDate);
-    impEndDate.setDate(startDate.getDate() + impDays);
-    const supportEndDate = new Date(impEndDate);
-    supportEndDate.setDate(impEndDate.getDate() + supportDays);
-
-    if (now <= impEndDate) {
-        const diffTime = Math.abs(impEndDate.getTime() - now.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return { phase: 'implementation', daysLeft: diffDays, label: `Implementação (${diffDays}d restantes)` };
-    } else if (now <= supportEndDate) {
-        const diffTime = Math.abs(supportEndDate.getTime() - now.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return { phase: 'support', daysLeft: diffDays, label: `Suporte Gratuito (${diffDays}d restantes)` };
-    } else {
-        return { phase: 'contract', daysLeft: 0, label: 'Contrato Ativo' };
-    }
-  };
-
-  const getHoursStatusColor = (used: number, total: number) => {
-    if (total === 0) return 'bg-slate-200';
-    const percentage = (used / total) * 100;
-    if (percentage > 100) return 'bg-rose-500';
-    if (percentage > 80) return 'bg-amber-500';
-    return 'bg-emerald-500';
-  };
-
-  const handleOpenClientModal = (client?: Client) => {
-    setActiveTab('clients');
+  const handleOpenClient = (client?: Client) => {
     if (client) {
-      setModalMode('edit');
-      setEditingClient({ ...client, customFields: client.customFields || {} });
+      setSelectedClient(client);
     } else {
-      setModalMode('create');
       const defaultSLA = slaTiers[0]?.id || '';
-      setEditingClient({ 
-          name: '',
+      const newClient: Client = { 
+          id: Math.random().toString(),
+          name: 'Novo Cliente',
           status: ClientStatus.ONBOARDING, 
           slaTierId: defaultSLA, 
           healthScore: 100, 
@@ -183,72 +69,12 @@ export const ClientManager: React.FC = () => {
           onboardingDate: new Date().toISOString().split('T')[0], 
           billingDay: 1, 
           hasImplementation: true,
-          customFields: {} 
-      });
+          customFields: {},
+          comments: [],
+          attachments: []
+      };
+      setSelectedClient(newClient);
     }
-    setIsModalOpen(true);
-  };
-
-  const handleOpenPartnerModal = (partner?: Partner) => {
-      setActiveTab('partners');
-      if (partner) {
-          setModalMode('edit');
-          setEditingPartner({ ...partner, customFields: partner.customFields || {} });
-      } else {
-          setModalMode('create');
-          setEditingPartner({ name: '', customFields: {} });
-      }
-      setIsModalOpen(true);
-  };
-
-  const handleSave = async () => {
-      try {
-          if (activeTab === 'clients') {
-              if (!editingClient.name?.trim()) return alert("O nome da empresa é obrigatório.");
-              if (!editingClient.slaTierId) return alert("Selecione um plano SLA.");
-
-              if (modalMode === 'create') {
-                  const created = await api.createClient(editingClient);
-                  setClients([created, ...clients]);
-                  
-                  if (created.partnerId) {
-                      const partner = partners.find(p => p.id === created.partnerId);
-                      if (partner && partner.costPerSeat && partner.costPerSeat > 0) {
-                          await api.createTransaction({
-                              description: `Adição de Cliente: ${created.name}`,
-                              amount: partner.costPerSeat,
-                              type: 'income',
-                              status: 'pending', 
-                              partnerId: partner.id,
-                              category: 'Receita Recorrente',
-                              date: new Date().toISOString().split('T')[0],
-                              frequency: 'single'
-                          });
-                          alert(`Transação de R$ ${partner.costPerSeat} criada automaticamente para o parceiro ${partner.name}.`);
-                      }
-                  }
-              } else {
-                  if(!editingClient.id) return;
-                  const updated = await api.updateClient(editingClient);
-                  setClients(clients.map(c => c.id === updated.id ? updated : c));
-              }
-          } else {
-               if (!editingPartner.name?.trim()) return alert("O nome da consultoria é obrigatório.");
-
-               if (modalMode === 'create') {
-                  const created = await api.createPartner(editingPartner);
-                  setPartners([created, ...partners]);
-              } else {
-                  if(!editingPartner.id) return;
-                  const updated = await api.updatePartner(editingPartner);
-                  setPartners(partners.map(p => p.id === updated.id ? updated : p));
-              }
-          }
-          setIsModalOpen(false);
-      } catch (e: any) {
-          console.error("Erro ao salvar:", e);
-          alert('Erro ao salvar: ' + (e.message || "Verifique se o banco de dados está conectado."));
-      }
   };
 
   const getStatusBadge = (status: ClientStatus) => {
@@ -269,14 +95,13 @@ export const ClientManager: React.FC = () => {
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Relacionamento</h2>
           <div className="flex space-x-2">
             <button onClick={() => setIsImporterOpen(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center transition-all shadow-sm"><Upload size={16} className="mr-2"/> Importar</button>
-            <button onClick={handleExportCSV} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center transition-all shadow-sm"><Download size={16} className="mr-2"/> Exportar</button>
-            <button onClick={() => activeTab === 'clients' ? handleOpenClientModal() : handleOpenPartnerModal()} className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg flex items-center transform hover:-translate-y-0.5"><Plus size={18} className="mr-2"/>{activeTab === 'clients' ? 'Novo Cliente' : 'Novo Parceiro'}</button>
+            <button onClick={() => activeTab === 'clients' ? handleOpenClient() : null} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md flex items-center transform active:scale-95"><Plus size={18} className="mr-2"/>{activeTab === 'clients' ? 'Novo Cliente' : 'Novo Parceiro'}</button>
           </div>
         </div>
 
         <div className="flex space-x-8 border-b border-slate-100">
-          <button onClick={() => { setActiveTab('clients'); setSelectedIds(new Set()); }} className={`pb-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'clients' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>Carteira de Clientes</button>
-          <button onClick={() => { setActiveTab('partners'); setSelectedIds(new Set()); }} className={`pb-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'partners' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>Gestão de Parceiros</button>
+          <button onClick={() => setActiveTab('clients')} className={`pb-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'clients' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>Carteira de Clientes</button>
+          <button onClick={() => setActiveTab('partners')} className={`pb-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'partners' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>Gestão de Parceiros</button>
         </div>
       </div>
 
@@ -286,64 +111,44 @@ export const ClientManager: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/50">
                 <tr>
-                  <th className="w-12 px-6 py-4"><button onClick={toggleSelectAll} className="text-slate-400 hover:text-indigo-600 transition-colors">{selectedIds.size > 0 && selectedIds.size === filteredClients.length ? <CheckSquare size={20}/> : <Square size={20}/>}</button></th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Cliente</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Fase do Contrato</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Consumo</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Saúde</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">SLA Consumido</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Plano</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-100">
                 {filteredClients.map((client) => {
-                   const partner = partners.find(p => p.id === client.partnerId);
                    const sla = slaTiers.find(s => s.id === client.slaTierId);
-                   const hoursUsed = Number(client.hoursUsedMonth || 0);
-                   const hoursTotal = Number(sla ? sla.includedHours : 0);
-                   const hoursPercent = hoursTotal > 0 ? Math.min((hoursUsed / hoursTotal) * 100, 100) : 0;
-                   const isOverLimit = hoursUsed > hoursTotal && hoursTotal > 0;
-                   const lifecycle = getClientPhase(client, partner);
-                   const isSelected = selectedIds.has(client.id);
+                   const hoursPercent = sla ? Math.min((client.hoursUsedMonth / sla.includedHours) * 100, 100) : 0;
 
                    return (
-                  <tr key={client.id} className={`hover:bg-slate-50 transition-colors group ${isSelected ? 'bg-indigo-50/40' : ''}`}>
-                    <td className="px-6 py-4"><button onClick={() => toggleSelection(client.id)} className={`${isSelected ? 'text-indigo-600' : 'text-slate-300 hover:text-indigo-400'} transition-colors`}>{isSelected ? <CheckSquare size={20}/> : <Square size={20}/>}</button></td>
+                  <tr key={client.id} className="hover:bg-slate-50 transition-colors group cursor-pointer" onClick={() => handleOpenClient(client)}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-100 to-blue-100 flex items-center justify-center text-indigo-700 font-bold text-lg border border-indigo-200 shadow-sm">{client.name.charAt(0)}</div>
-                        <div className="ml-4">
-                          <div className="flex items-center">
-                              <span className="text-sm font-bold text-slate-800">{client.name}</span>
-                              {/* Fix: removed direct 'title' prop from Lucide icon to avoid type error */}
-                              {client.hasImplementation && <Rocket size={14} className="ml-2 text-indigo-500"/>}
-                          </div>
-                          {partner && <div className="text-xs text-slate-500">Parceiro: <span className="font-medium text-slate-700">{partner.name}</span></div>}
-                        </div>
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-100 to-blue-100 flex items-center justify-center text-indigo-700 font-bold text-lg border border-indigo-200">{client.name.charAt(0)}</div>
+                        <div className="ml-4"><span className="text-sm font-bold text-slate-800">{client.name}</span></div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(client.status)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                       <div className="flex items-center">
-                          <div className="flex flex-col"><span className="text-sm font-semibold text-slate-700">{lifecycle.label}</span></div>
-                       </div>
+                       <span className={`text-xs font-black ${client.healthScore > 80 ? 'text-emerald-500' : 'text-amber-500'}`}>{client.healthScore}%</span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap align-middle">
-                        {lifecycle.phase === 'contract' ? (
-                            <div className="w-40">
-                               <div className="flex justify-between text-xs mb-1"><span className={`font-bold ${isOverLimit ? 'text-rose-600' : 'text-slate-700'}`}>{hoursUsed.toFixed(1)}h</span><span className="text-slate-400 font-bold">/ {hoursTotal}h</span></div>
-                               <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200"><div className={`h-2 rounded-full transition-all duration-500 ${getHoursStatusColor(hoursUsed, hoursTotal)}`} style={{ width: `${hoursPercent}%` }}></div></div>
-                            </div>
-                        ) : (<span className="text-xs text-slate-400 italic">Ilimitado na fase atual</span>)}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="w-32">
+                           <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                               <div className={`h-full rounded-full transition-all duration-500 ${hoursPercent > 90 ? 'bg-rose-500' : 'bg-indigo-500'}`} style={{ width: `${hoursPercent}%` }}></div>
+                           </div>
+                        </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                       <span className="font-bold text-indigo-900 block">{sla?.name || 'N/A'}</span>
-                       <div className="text-xs text-slate-500 font-medium">R$ {Number(sla?.price || 0).toLocaleString('pt-BR')}</div>
+                       <span className="font-bold text-slate-800">{sla?.name || 'N/A'}</span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => {setSelectedClientForTemplate(client); setIsTemplateModalOpen(true);}} className="text-slate-400 hover:text-emerald-600 p-2 bg-white border border-slate-200 rounded-lg hover:border-emerald-200 shadow-sm transition-colors" title="Aplicar Template"><Layers size={16} /></button>
-                        <button onClick={() => handleOpenClientModal(client)} className="text-slate-400 hover:text-indigo-600 p-2 bg-white border border-slate-200 rounded-lg hover:border-indigo-200 shadow-sm transition-colors"><Edit2 size={16} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleOpenClient(client); }} className="text-slate-400 hover:text-indigo-600 p-2"><Edit2 size={16}/></button>
                       </div>
                     </td>
                   </tr>
@@ -355,103 +160,28 @@ export const ClientManager: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPartners.map(partner => (
               <div key={partner.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between hover:shadow-md transition-shadow group relative">
-                <div className="absolute top-4 right-4 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleOpenPartnerModal(partner)} className="p-2 bg-white border border-slate-200 rounded-lg hover:text-indigo-600 transition-colors"><Edit2 size={16}/></button>
-                    <button onClick={() => handleDeletePartner(partner.id)} className="p-2 bg-white border border-slate-200 rounded-lg hover:text-rose-600 transition-colors"><Trash2 size={16}/></button>
-                </div>
-                <div className="mt-2">
-                  <div className="flex justify-between items-start mb-4">
-                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-200">{partner.name.charAt(0)}</div>
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-1">{partner.name}</h3>
-                </div>
+                <h3 className="text-xl font-bold text-slate-800">{partner.name}</h3>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* CREATE/EDIT MODAL */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="text-lg font-bold text-slate-800">{modalMode === 'create' ? 'Novo' : 'Editar'} {activeTab === 'clients' ? 'Cliente' : 'Parceiro'}</h3>
-                    <button onClick={() => setIsModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
-                </div>
-                <div className="p-6 space-y-4">
-                    {activeTab === 'clients' ? (
-                        <>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Nome da Empresa</label>
-                                <input 
-                                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-900" 
-                                    value={editingClient.name || ''} 
-                                    onChange={e => setEditingClient({...editingClient, name: e.target.value})} 
-                                    placeholder="Ex: Acme Corp"
-                                />
-                            </div>
-
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center">
-                                        <div className="p-2 bg-white rounded-lg border border-slate-100 shadow-sm mr-3">
-                                            <Rocket size={18} className="text-indigo-600"/>
-                                        </div>
-                                        <div>
-                                            <span className="block text-sm font-bold text-slate-800">Incluir Implementação?</span>
-                                            <span className="text-xs text-slate-500 font-medium">Define se haverá fase de setup inicial.</span>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => setEditingClient({...editingClient, hasImplementation: !editingClient.hasImplementation})}
-                                        className={`transition-colors ${editingClient.hasImplementation ? 'text-indigo-600' : 'text-slate-400'}`}
-                                    >
-                                        {editingClient.hasImplementation ? <ToggleRight size={32}/> : <ToggleLeft size={32}/>}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Status</label><select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.status} onChange={e => setEditingClient({...editingClient, status: e.target.value as ClientStatus})}>{Object.values(ClientStatus).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Plano SLA</label><select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.slaTierId || ''} onChange={e => setEditingClient({...editingClient, slaTierId: e.target.value})}><option value="">Selecione...</option>{slaTiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-                            </div>
-                            <div><label className="block text-sm font-bold text-slate-700 mb-1">Parceiro Implementador</label><select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.partnerId || ''} onChange={e => setEditingClient({...editingClient, partnerId: e.target.value})}><option value="">Nenhum</option>{partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Data Onboarding</label>
-                                    <input type="date" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.onboardingDate || ''} onChange={e => setEditingClient({...editingClient, onboardingDate: e.target.value})} />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Dia Vencimento</label>
-                                    <input type="number" min="1" max="31" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.billingDay || ''} onChange={e => setEditingClient({...editingClient, billingDay: Number(e.target.value)})} placeholder="Ex: 10" />
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                             <div>
-                                 <label className="block text-sm font-bold text-slate-700 mb-1">Nome da Consultoria</label>
-                                 <input 
-                                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" 
-                                    value={editingPartner.name || ''} 
-                                    onChange={e => setEditingPartner({...editingPartner, name: e.target.value})} 
-                                    placeholder="Ex: Consultoria XYZ"
-                                 />
-                             </div>
-                        </>
-                    )}
-                </div>
-                <div className="p-4 bg-slate-50 flex justify-end space-x-2">
-                    <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded-lg hover:bg-slate-100">Cancelar</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center"><Save size={16} className="mr-2"/> Salvar</button>
-                </div>
-            </div>
-        </div>
+      {selectedClient && (
+          <ClientDetailModal 
+            client={selectedClient}
+            onClose={() => setSelectedClient(null)}
+            onUpdate={(uc) => {
+                setClients(clients.map(c => c.id === uc.id ? uc : c));
+                loadData();
+            }}
+            onDelete={(id) => {
+                api.deleteClientsBulk([id]);
+                setClients(clients.filter(c => c.id !== id));
+                setSelectedClient(null);
+            }}
+          />
       )}
-
-      {/* TEMPLATE MODAL... */}
     </div>
   );
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, Settings, PieChart, Layers, Menu, X, ChevronLeft, ChevronRight, UserCog, LogOut, Package, Hexagon, BookOpen } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
@@ -135,12 +136,18 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  
   useEffect(() => {
+      // Inicializar Schema do Banco
+      api.initializeDatabase();
+      
       const stored = localStorage.getItem('tuesday_current_user');
       if (stored) setUser(JSON.parse(stored));
   }, []);
+
   const handleLogin = (u: User) => setUser(u);
   const handleLogout = () => { api.logout(); setUser(null); };
+
   return (
     <ErrorBoundary>
         {!user ? <Auth onLogin={handleLogin} /> : <AppContent user={user} onLogout={handleLogout} />}

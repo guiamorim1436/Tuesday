@@ -2,7 +2,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { DollarSign, Users, Activity, AlertTriangle, TrendingUp, Clock, Filter, CheckCircle, Loader2, BatteryCharging, Zap, X, ChevronRight, List } from 'lucide-react';
-import { TaskStatus, ClientStatus, TaskPriority, Client, Task, Partner, SLATier, WorkConfig, Transaction } from '../types';
+// Fix: Added DayWorkSettings to imports to support type casting in capacity calculation
+import { TaskStatus, ClientStatus, TaskPriority, Client, Task, Partner, SLATier, WorkConfig, Transaction, DayWorkSettings } from '../types';
 import { api } from '../services/api';
 
 export const Dashboard: React.FC = () => {
@@ -79,14 +80,20 @@ export const Dashboard: React.FC = () => {
 
   // CAPACITY ANALYSIS
   const capacityStats = useMemo(() => {
-      if (!workConfig) return { totalCapacity: 0, soldHours: 0, availableHours: 0 };
+      if (!workConfig || !workConfig.days) return { totalCapacity: 0, soldHours: 0, availableHours: 0 };
       
-      const workDaysInMonth = 22; // Average
-      // Simplistic calculation: Start - End hours * Work Days
-      const startH = parseInt(workConfig.workHoursStart.split(':')[0]);
-      const endH = parseInt(workConfig.workHoursEnd.split(':')[0]);
-      const hoursPerDay = Math.max(0, endH - startH);
-      const totalCapacity = hoursPerDay * workDaysInMonth; // Per person (assuming 1 for now)
+      // Calculate total capacity based on the new structure
+      let monthlyCapacity = 0;
+      // Fix: Cast Object.values to DayWorkSettings[] to avoid 'unknown' type errors when accessing day properties.
+      (Object.values(workConfig.days) as DayWorkSettings[]).forEach(day => {
+          if (day.active && day.start && day.end) {
+              const [sH, sM] = day.start.split(':').map(Number);
+              const [eH, eM] = day.end.split(':').map(Number);
+              const dailyHours = (eH + eM/60) - (sH + sM/60);
+              // Multiply by 4.3 weeks per month roughly
+              monthlyCapacity += dailyHours * 4.33;
+          }
+      });
 
       // Sold Hours = Active Contracts included Hours + One-off billable tasks
       let soldHours = 0;
@@ -96,9 +103,9 @@ export const Dashboard: React.FC = () => {
       });
 
       return {
-          totalCapacity,
+          totalCapacity: Math.round(monthlyCapacity),
           soldHours,
-          availableHours: Math.max(0, totalCapacity - soldHours)
+          availableHours: Math.max(0, Math.round(monthlyCapacity) - soldHours)
       };
   }, [workConfig, filteredClients, slaTiers]);
 
@@ -255,7 +262,7 @@ export const Dashboard: React.FC = () => {
         {/* ROW 1: KPI Cards (Clickable) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div onClick={handleShowMRRDetails} className="bg-white/60 backdrop-blur-xl p-6 rounded-3xl shadow-xl shadow-indigo-100/40 border border-white/60 flex flex-col justify-between hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 relative overflow-hidden group cursor-pointer">
-                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-100 transition-opacity">
                     <DollarSign size={80} className="text-emerald-600" />
                 </div>
                 <div className="flex justify-between items-start mb-2 relative z-10">
@@ -297,10 +304,10 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="w-full flex justify-between text-xs mt-2 font-medium">
                     <span className="text-slate-500">Total: {capacityStats.totalCapacity}h</span>
-                    <span className="text-indigo-600 font-bold">{Math.round((capacityStats.soldHours / capacityStats.totalCapacity) * 100)}% Vendido</span>
+                    <span className="text-indigo-600 font-bold">{capacityStats.totalCapacity > 0 ? Math.round((capacityStats.soldHours / capacityStats.totalCapacity) * 100) : 0}% Vendido</span>
                 </div>
                 <div className="w-full bg-slate-200/50 rounded-full h-1.5 mt-1 overflow-hidden">
-                    <div className="bg-indigo-500 h-1.5 rounded-full" style={{width: `${Math.min(100, (capacityStats.soldHours / capacityStats.totalCapacity) * 100)}%`}}></div>
+                    <div className="bg-indigo-500 h-1.5 rounded-full" style={{width: `${Math.min(100, capacityStats.totalCapacity > 0 ? (capacityStats.soldHours / capacityStats.totalCapacity) * 100 : 0)}%`}}></div>
                 </div>
             </div>
 
