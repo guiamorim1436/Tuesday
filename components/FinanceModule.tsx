@@ -18,7 +18,15 @@ export const FinanceModule: React.FC = () => {
   const [categories, setCategories] = useState<string[]>(DEFAULT_FINANCE_CATEGORIES);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [currentTransaction, setCurrentTransaction] = useState<Partial<Transaction>>({});
+  const [currentTransaction, setCurrentTransaction] = useState<Partial<Transaction>>({
+    type: 'income',
+    status: 'paid',
+    frequency: 'single',
+    amount: 0,
+    description: '',
+    category: 'Geral',
+    date: new Date().toISOString().split('T')[0]
+  });
   const [linkType, setLinkType] = useState<'none' | 'client' | 'partner'>('none');
 
   useEffect(() => {
@@ -73,7 +81,7 @@ export const FinanceModule: React.FC = () => {
           frequency: 'single', 
           amount: 0, 
           description: '', 
-          category: 'Receita Recorrente', 
+          category: 'Geral', 
           date: new Date().toISOString().split('T')[0], 
           installments: 1, 
           customFields: {} 
@@ -83,7 +91,9 @@ export const FinanceModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveTransaction = async () => {
+  const handleSaveTransaction = async (e?: React.MouseEvent) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    
     if (!currentTransaction.description || !currentTransaction.amount) { 
         alert("Preencha descrição e valor corretamente."); 
         return; 
@@ -99,7 +109,7 @@ export const FinanceModule: React.FC = () => {
         } as Transaction;
 
         await api.createTransaction(transactionData);
-        await loadData(); // Recarrega para garantir sincronia com o banco
+        await loadData(); 
         setIsModalOpen(false);
     } catch(e: any) { 
         alert("Erro ao salvar transação: " + e.message);
@@ -215,8 +225,9 @@ export const FinanceModule: React.FC = () => {
                       <div className="space-y-1.5">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vincular a Cliente</label>
                           <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm" value={currentTransaction.clientId || ''} onChange={e => {
-                              setCurrentTransaction({...currentTransaction, clientId: e.target.value});
-                              setLinkType(e.target.value ? 'client' : 'none');
+                              const val = e.target.value;
+                              setCurrentTransaction({...currentTransaction, clientId: val});
+                              setLinkType(val ? 'client' : 'none');
                           }}>
                               <option value="">Nenhum</option>
                               {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -225,7 +236,7 @@ export const FinanceModule: React.FC = () => {
                   </div>
                   <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
                       <button onClick={() => setIsModalOpen(false)} className="px-6 py-3 text-slate-600 font-bold hover:bg-white rounded-xl transition-all">Cancelar</button>
-                      <button onClick={handleSaveTransaction} disabled={isSaving} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 shadow-lg disabled:opacity-50">
+                      <button onClick={(e) => handleSaveTransaction(e)} disabled={isSaving} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 shadow-lg disabled:opacity-50">
                           {isSaving ? <Loader2 className="animate-spin" size={18}/> : <><Save size={18}/> Salvar Transação</>}
                       </button>
                   </div>

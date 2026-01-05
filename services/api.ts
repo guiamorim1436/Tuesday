@@ -22,8 +22,15 @@ const mapTaskToDb = (t: Partial<Task>) => {
         start_date: t.startDate ? new Date(t.startDate).toISOString() : null,
         due_date: t.dueDate ? new Date(t.dueDate).toISOString() : null,
         estimated_hours: Number(t.estimatedHours) || 0,
-        category: t.category || 'Geral'
-        // Removido actual_hours, attachments, comments e subtasks que estão causando erro de schema
+        actual_hours: Number(t.actualHours) || 0,
+        category: t.category || 'Geral',
+        is_tracking_time: !!t.isTrackingTime,
+        last_time_log_start: t.lastTimeLogStart || null,
+        assignees: t.assignees || [],
+        subtasks: t.subtasks || [],
+        comments: t.comments || [],
+        attachments: t.attachments || [],
+        custom_fields: t.customFields || {}
     };
     if (isValidUUID(t.id)) data.id = t.id;
     return data;
@@ -37,6 +44,7 @@ const mapDbToTask = (t: any): Task => ({
     estimatedHours: t.estimated_hours,
     actualHours: t.actual_hours || 0,
     isTrackingTime: t.is_tracking_time || false,
+    lastTimeLogStart: t.last_time_log_start,
     assignees: t.assignees || [],
     subtasks: t.subtasks || [],
     comments: t.comments || [],
@@ -52,8 +60,11 @@ const mapClientToDb = (c: Partial<Client>) => {
         partner_id: isValidUUID(c.partnerId) ? c.partnerId : null,
         onboarding_date: c.onboardingDate || new Date().toISOString().split('T')[0],
         health_score: Number(c.healthScore) ?? 100,
-        billing_day: Number(c.billingDay) || 1
-        // Removido attachments e custom_fields que estão causando erro de schema
+        hours_used_month: Number(c.hoursUsedMonth) || 0,
+        billing_day: Number(c.billingDay) || 1,
+        attachments: c.attachments || [],
+        comments: c.comments || [],
+        custom_fields: c.customFields || {}
     };
     if (isValidUUID(c.id)) data.id = c.id;
     return data;
@@ -67,6 +78,8 @@ const mapDbToClient = (c: any): Client => ({
     healthScore: c.health_score,
     hoursUsedMonth: c.hours_used_month || 0,
     billingDay: c.billing_day || 1,
+    attachments: c.attachments || [],
+    comments: c.comments || [],
     customFields: c.custom_fields || {}
 });
 
@@ -167,13 +180,13 @@ export const api = {
     },
 
     getPartners: async (): Promise<Partner[]> => {
-        if (!isConfigured) return MOCK.MOCK_PARTNERS;
+        if (!isConfigured) return MOCK_PARTNERS;
         const { data } = await supabase.from('partners').select('*').order('name');
         return data || [];
     },
 
     getUsers: async (): Promise<User[]> => {
-        if (!isConfigured) return MOCK.MOCK_USERS as any;
+        if (!isConfigured) return MOCK_USERS as any;
         const { data } = await supabase.from('users').select('*').order('name');
         return data || [];
     },
@@ -199,7 +212,7 @@ export const api = {
     },
 
     getCatalogItems: async (): Promise<CatalogItem[]> => {
-        if (!isConfigured) return MOCK.MOCK_CATALOG;
+        if (!isConfigured) return MOCK_CATALOG;
         const { data } = await supabase.from('catalog_items').select('*').order('name');
         return data || [];
     },
