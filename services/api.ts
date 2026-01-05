@@ -2,7 +2,8 @@ import { supabase, isConfigured } from '../lib/supabaseClient';
 import { 
   Task, Client, Partner, Transaction, User, SLATier, ServiceCategory, 
   CompanySettings, TaskStatus, TaskPriority, WorkConfig, PriorityWeight,
-  TaskTemplateGroup, Playbook, PlaybookBlock, CatalogItem, SubscriptionItem
+  TaskTemplateGroup, Playbook, PlaybookBlock, CatalogItem, SubscriptionItem,
+  ClientStatus
 } from '../types';
 import * as MOCK from '../constants';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -10,25 +11,29 @@ import { GoogleGenAI, Type } from "@google/genai";
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Helpers de Mapeamento para garantir integridade com o Banco
-const mapTaskToDb = (t: Partial<Task>) => ({
-    title: t.title,
-    description: t.description,
-    client_id: t.clientId,
-    status: t.status,
-    priority: t.priority,
-    start_date: t.startDate,
-    due_date: t.dueDate,
-    estimated_hours: t.estimatedHours,
-    actual_hours: t.actualHours,
-    is_tracking_time: t.isTrackingTime,
-    last_time_log_start: t.lastTimeLogStart,
-    assignees: t.assignees,
-    category: t.category,
-    subtasks: t.subtasks,
-    comments: t.comments,
-    attachments: t.attachments,
-    custom_fields: t.customFields
-});
+const mapTaskToDb = (t: Partial<Task>) => {
+    const data: any = {
+        title: t.title,
+        description: t.description || '',
+        client_id: (t.clientId && t.clientId.length > 10) ? t.clientId : null,
+        status: t.status || TaskStatus.BACKLOG,
+        priority: t.priority || TaskPriority.MEDIUM,
+        start_date: t.startDate,
+        due_date: t.dueDate,
+        estimated_hours: t.estimatedHours || 0,
+        actual_hours: t.actualHours || 0,
+        is_tracking_time: !!t.isTrackingTime,
+        last_time_log_start: t.lastTimeLogStart,
+        assignees: t.assignees || [],
+        category: t.category || 'Geral',
+        subtasks: t.subtasks || [],
+        comments: t.comments || [],
+        attachments: t.attachments || [],
+        custom_fields: t.customFields || {}
+    };
+    if (t.id && t.id.length > 10) data.id = t.id;
+    return data;
+};
 
 const mapDbToTask = (t: any): Task => ({
     ...t,
@@ -45,20 +50,24 @@ const mapDbToTask = (t: any): Task => ({
     attachments: t.attachments || []
 });
 
-const mapClientToDb = (c: Partial<Client>) => ({
-    name: c.name,
-    description: c.description,
-    status: c.status,
-    sla_tier_id: c.slaTierId,
-    partner_id: c.partnerId,
-    onboarding_date: c.onboardingDate,
-    health_score: c.healthScore,
-    hours_used_month: c.hoursUsedMonth,
-    billing_day: c.billingDay,
-    custom_fields: c.customFields,
-    comments: c.comments,
-    attachments: c.attachments
-});
+const mapClientToDb = (c: Partial<Client>) => {
+    const data: any = {
+        name: c.name,
+        description: c.description || '',
+        status: c.status || ClientStatus.ONBOARDING,
+        sla_tier_id: (c.slaTierId && c.slaTierId.length > 10) ? c.slaTierId : null,
+        partner_id: (c.partnerId && c.partnerId.length > 10) ? c.partnerId : null,
+        onboarding_date: c.onboardingDate || new Date().toISOString().split('T')[0],
+        health_score: c.healthScore ?? 100,
+        hours_used_month: c.hoursUsedMonth || 0,
+        billing_day: c.billingDay || 1,
+        custom_fields: c.customFields || {},
+        comments: c.comments || [],
+        attachments: c.attachments || []
+    };
+    if (c.id && c.id.length > 10) data.id = c.id;
+    return data;
+};
 
 const mapDbToClient = (c: any): Client => ({
     ...c,
@@ -88,7 +97,6 @@ export const api = {
             return mockTask;
         }
         
-        // Garantia de data de entrega mínima se não fornecida
         if (!task.dueDate && task.startDate) {
             const d = new Date(task.startDate);
             d.setHours(d.getHours() + (task.estimatedHours || 4));
