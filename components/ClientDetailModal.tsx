@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Trash2, Shield, Heart, Clock, DollarSign, Rocket, MessageCircle, FileText, Layout, Info, User, ChevronDown, CheckCircle2, Paperclip, Send, Plus, Loader2, Calendar } from 'lucide-react';
 import { Client, ClientStatus, SLATier, Partner, Comment, Attachment } from '../types';
@@ -49,6 +48,8 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({ client, on
       const updated = await api.updateClient(editedClient);
       onUpdate(updated);
       onClose();
+    } catch (err: any) {
+        alert("Erro ao salvar cliente: " + err.message);
     } finally { setIsLoading(false); }
   };
 

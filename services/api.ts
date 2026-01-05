@@ -10,18 +10,20 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Helpers de Mapeamento para garantir integridade com o Banco
+// Validador de UUID real para evitar erro de sintaxe no Supabase
+const isValidUUID = (id?: string) => !!id && id.length === 36;
+
 const mapTaskToDb = (t: Partial<Task>) => {
     const data: any = {
         title: t.title,
         description: t.description || '',
-        client_id: (t.clientId && t.clientId.length > 10) ? t.clientId : null,
+        client_id: isValidUUID(t.clientId) ? t.clientId : null,
         status: t.status || TaskStatus.BACKLOG,
         priority: t.priority || TaskPriority.MEDIUM,
-        start_date: t.startDate,
-        due_date: t.dueDate,
-        estimated_hours: t.estimatedHours || 0,
-        actual_hours: t.actualHours || 0,
+        start_date: t.startDate ? new Date(t.startDate).toISOString() : null,
+        due_date: t.dueDate ? new Date(t.dueDate).toISOString() : null,
+        estimated_hours: Number(t.estimatedHours) || 0,
+        actual_hours: Number(t.actualHours) || 0,
         is_tracking_time: !!t.isTrackingTime,
         last_time_log_start: t.lastTimeLogStart,
         assignees: t.assignees || [],
@@ -31,7 +33,8 @@ const mapTaskToDb = (t: Partial<Task>) => {
         attachments: t.attachments || [],
         custom_fields: t.customFields || {}
     };
-    if (t.id && t.id.length > 10) data.id = t.id;
+    // Só envia o ID se for um UUID válido (para Updates)
+    if (isValidUUID(t.id)) data.id = t.id;
     return data;
 };
 
@@ -55,17 +58,17 @@ const mapClientToDb = (c: Partial<Client>) => {
         name: c.name,
         description: c.description || '',
         status: c.status || ClientStatus.ONBOARDING,
-        sla_tier_id: (c.slaTierId && c.slaTierId.length > 10) ? c.slaTierId : null,
-        partner_id: (c.partnerId && c.partnerId.length > 10) ? c.partnerId : null,
+        sla_tier_id: isValidUUID(c.slaTierId) ? c.slaTierId : null,
+        partner_id: isValidUUID(c.partnerId) ? c.partnerId : null,
         onboarding_date: c.onboardingDate || new Date().toISOString().split('T')[0],
-        health_score: c.healthScore ?? 100,
-        hours_used_month: c.hoursUsedMonth || 0,
-        billing_day: c.billingDay || 1,
+        health_score: Number(c.healthScore) ?? 100,
+        hours_used_month: Number(c.hoursUsedMonth) || 0,
+        billing_day: Number(c.billingDay) || 1,
         custom_fields: c.customFields || {},
         comments: c.comments || [],
         attachments: c.attachments || []
     };
-    if (c.id && c.id.length > 10) data.id = c.id;
+    if (isValidUUID(c.id)) data.id = c.id;
     return data;
 };
 
@@ -97,16 +100,17 @@ export const api = {
             return mockTask;
         }
         
-        if (!task.dueDate && task.startDate) {
-            const d = new Date(task.startDate);
-            d.setHours(d.getHours() + (task.estimatedHours || 4));
-            task.dueDate = d.toISOString();
+        // Se for agendamento automático, calculamos um dueDate padrão
+        if (!task.dueDate) {
+            const start = task.startDate ? new Date(task.startDate) : new Date();
+            start.setHours(start.getHours() + (task.estimatedHours || 4));
+            task.dueDate = start.toISOString();
         }
 
         const { data, error } = await supabase.from('tasks').insert([mapTaskToDb(task)]).select().single();
         if (error) {
-            console.error("Erro ao criar tarefa:", error);
-            throw error;
+            console.error("❌ Erro Supabase (Tasks):", error);
+            throw new Error(error.message);
         }
         return mapDbToTask(data);
     },
@@ -169,10 +173,13 @@ export const api = {
 
     updateClient: async (client: Partial<Client>): Promise<Client> => {
         if (!isConfigured) return client as Client;
-        const { data, error } = await supabase.from('clients').upsert(mapClientToDb(client)).select().single();
+        
+        const payload = mapClientToDb(client);
+        const { data, error } = await supabase.from('clients').upsert(payload).select().single();
+        
         if (error) {
-            console.error("Erro ao salvar cliente:", error);
-            throw error;
+            console.error("❌ Erro Supabase (Clients):", error);
+            throw new Error(error.message);
         }
         return mapDbToClient(data);
     },

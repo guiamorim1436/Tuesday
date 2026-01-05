@@ -72,6 +72,8 @@ export const TaskBoard: React.FC = () => {
           setNewTask(prev => ({ ...prev, title: '' }));
           setIsAutoScheduling(true);
           setSelectedTask(nt);
+      } catch (err: any) {
+          alert("Não foi possível salvar a tarefa: " + err.message);
       } finally {
           setIsLoading(false);
       }
