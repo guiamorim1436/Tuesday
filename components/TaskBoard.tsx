@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Layout, List, Calendar, GanttChartSquare, CheckSquare, Square, Trash2, Edit3, Loader2, Clock, Users, Filter, ChevronRight, Settings2, Download, Upload, CheckCircle2, AlertTriangle, GanttChart, X, Save, Sparkles, CalendarDays, Zap, ArrowRight, Info } from 'lucide-react';
 import { Task, TaskStatus, Client, User, TaskPriority, TaskCardConfig, WorkConfig } from '../types';
@@ -80,11 +79,11 @@ export const TaskBoard: React.FC = () => {
 
   // Real-time SLA Estimation for UI feedback
   const slaEstimation = useMemo(() => {
-    if (!workConfig) return null;
+    if (!workConfig || !workConfig.slaByPriority) return null;
     
-    // In a real app, this logic would mirror the api.ts exactly
-    // Here we show the user a preview of what the SLA motor will do
     const priorityConfig = workConfig.slaByPriority[newTask.priority];
+    if (!priorityConfig) return null;
+
     const hours = newTask.estimatedHours;
     
     let simulatedStart = isAutoScheduling ? new Date() : new Date(newTask.startDate);
@@ -218,7 +217,7 @@ export const TaskBoard: React.FC = () => {
       </div>
 
       {/* Main Board Area */}
-      <div className="flex-1 overflow-auto p-8 custom-scrollbar">
+      <div className="flex-1 overflow-auto p-8 custom-scrollbar pr-2 pb-20">
         {viewMode === 'kanban-status' && (
             <div className="flex gap-6 h-full min-h-[600px]">
                 {Object.values(TaskStatus).map(status => (

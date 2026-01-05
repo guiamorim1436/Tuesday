@@ -1,4 +1,3 @@
-
 import { supabase, isConfigured } from '../lib/supabaseClient';
 import { 
   Task, Client, Partner, Transaction, User, SLATier, ServiceCategory, 
@@ -27,7 +26,7 @@ export const api = {
             estimatedHours: t.estimated_hours,
             actualHours: t.actual_hours,
             isTrackingTime: t.is_tracking_time,
-            lastTimeLogStart: t.last_time_log_start,
+            lastTime_log_start: t.last_time_log_start,
             assignees: t.assignees || [],
             subtasks: t.subtasks || [],
             comments: t.comments || [],
@@ -68,8 +67,20 @@ export const api = {
     
     getWorkConfig: async (): Promise<WorkConfig | null> => {
         if (!isConfigured) return MOCK.DEFAULT_WORK_CONFIG;
-        const { data } = await supabase.from('app_settings').select('value').eq('key', 'work_config').single();
-        return data?.value || MOCK.DEFAULT_WORK_CONFIG;
+        try {
+            const { data } = await supabase.from('app_settings').select('value').eq('key', 'work_config').single();
+            const fetchedConfig = data?.value;
+            
+            // Garantia Arquitetural: Se o banco retornar algo parcial, fazemos merge com o default
+            return {
+                ...MOCK.DEFAULT_WORK_CONFIG,
+                ...fetchedConfig,
+                days: { ...MOCK.DEFAULT_WORK_CONFIG.days, ...(fetchedConfig?.days || {}) },
+                slaByPriority: { ...MOCK.DEFAULT_WORK_CONFIG.slaByPriority, ...(fetchedConfig?.slaByPriority || {}) }
+            };
+        } catch (e) {
+            return MOCK.DEFAULT_WORK_CONFIG;
+        }
     },
 
     saveWorkConfig: async (config: WorkConfig) => {
