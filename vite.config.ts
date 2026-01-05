@@ -8,9 +8,10 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     base: '/', 
     define: {
-      // Compatibilidade mínima para libs legadas, mas sem interferir no build core
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
-      'global': 'window'
+      'global': 'window',
+      // Garante compatibilidade para libs que ainda buscam o objeto process
+      'process.env.NODE_ENV': JSON.stringify(mode)
     },
     server: {
       host: true,

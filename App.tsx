@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, Settings, PieChart, Layers, Menu, X, ChevronLeft, ChevronRight, UserCog, LogOut, Package, Hexagon, BookOpen } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
@@ -68,8 +67,7 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
 
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-white/20 text-slate-900 flex items-center justify-between px-4 z-50 shadow-sm">
           <div className="flex items-center space-x-2">
-              <img src="/logo.png" alt="Logo" className="h-8 w-auto rounded" onError={(e) => { e.currentTarget.style.display = 'none'; document.getElementById('mob-logo-fallback')!.style.display = 'block'; }} />
-              <div id="mob-logo-fallback" className="hidden bg-indigo-600 p-1.5 rounded-lg"><Layers size={20} className="text-white"/></div>
+              <img src="/logo.png" alt="Logo" className="h-8 w-auto rounded" />
               <h1 className="font-bold text-lg text-slate-800">Tuesday</h1>
           </div>
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-600">
@@ -86,14 +84,13 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
           <div className="flex-shrink-0 relative group">
              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
              <div className="relative">
-                <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; const icon = document.getElementById('sidebar-logo-fallback'); if(icon) icon.style.display = 'block'; }} />
-                <div id="sidebar-logo-fallback" className="hidden bg-gradient-to-br from-indigo-500 to-blue-600 p-2.5 rounded-xl shadow-lg shadow-indigo-500/20"><Layers size={24} className="text-white"/></div>
+                <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain" />
              </div>
           </div>
           {!isCollapsed && (
             <div className="overflow-hidden whitespace-nowrap">
                 <h1 className="text-xl font-bold tracking-tight text-white">Tuesday</h1>
-                <p className="text-[10px] text-slate-400 tracking-[0.2em] font-medium uppercase">Intranet HUB</p>
+                <p className="text-[10px] text-slate-400 tracking-[0.2em] font-medium uppercase">Tenno HUB 2025</p>
             </div>
           )}
         </div>
