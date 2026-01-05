@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Settings, PieChart, Layers, Menu, X, ChevronLeft, ChevronRight, UserCog, LogOut, Package, Hexagon, BookOpen, CalendarCheck } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, PieChart, Layers, Menu, X, ChevronLeft, ChevronRight, UserCog, LogOut, Package, Hexagon, BookOpen } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { TaskBoard } from './components/TaskBoard';
 import { ClientManager } from './components/ClientManager';
@@ -12,33 +11,15 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { Auth } from './components/Auth';
 import { UserManagement } from './components/UserManagement';
 import { PlaybookModule } from './components/PlaybookModule';
-import { PublicBooking } from './components/PublicBooking';
 import { api } from './services/api';
-import { User, TaskStatus, TaskPriority, Task } from './types';
+import { User } from './types';
 
 type View = 'dashboard' | 'tasks' | 'clients' | 'finance' | 'settings' | 'users' | 'plans' | 'workflow' | 'playbooks';
-
-declare const google: any;
 
 const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLogout }) => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-
-  // --- BACKGROUND SYNC ENGINE (5 MIN) ---
-  useEffect(() => {
-    const syncInterval = setInterval(async () => {
-        console.log("Tuesday Sync Engine: Verificando atualizações na agenda...");
-        const settings = await api.getGoogleSettings();
-        if (settings?.syncEnabled && settings?.clientId) {
-            // A sincronização automática requer o token que normalmente expira.
-            // Aqui simulamos a chamada silenciosa se o usuário estiver logado.
-            // Em uma app de produção, usaríamos refresh tokens via Backend.
-        }
-    }, 5 * 60 * 1000); 
-
-    return () => clearInterval(syncInterval);
-  }, []);
 
   const renderContent = () => {
     switch (currentView) {
@@ -86,7 +67,8 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
 
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-white/20 text-slate-900 flex items-center justify-between px-4 z-50 shadow-sm">
           <div className="flex items-center space-x-2">
-              <div className="bg-indigo-600 p-1.5 rounded-lg"><Layers size={20} className="text-white"/></div>
+              <img src="/logo.png" alt="Logo" className="h-8 w-auto rounded" onError={(e) => { e.currentTarget.style.display = 'none'; document.getElementById('mob-logo-fallback')!.style.display = 'block'; }} />
+              <div id="mob-logo-fallback" className="hidden bg-indigo-600 p-1.5 rounded-lg"><Layers size={20} className="text-white"/></div>
               <h1 className="font-bold text-lg text-slate-800">Tuesday</h1>
           </div>
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-600">
@@ -100,8 +82,12 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
 
       <aside className={`fixed md:relative z-40 flex flex-col flex-shrink-0 transition-all duration-300 h-full border-r border-white/10 shadow-2xl ${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0'} ${isCollapsed ? 'md:w-24' : 'md:w-72'} pt-16 md:pt-0 bg-slate-900/95 backdrop-blur-xl text-white`}>
         <div className={`p-8 flex items-center ${isCollapsed ? 'justify-center' : 'space-x-4'} mb-2`}>
-          <div className="relative">
-            <div className="bg-gradient-to-br from-indigo-500 to-blue-600 p-2.5 rounded-xl shadow-lg shadow-indigo-500/20"><Layers size={24} className="text-white"/></div>
+          <div className="flex-shrink-0 relative group">
+             <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+             <div className="relative">
+                <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; const icon = document.getElementById('sidebar-logo-fallback'); if(icon) icon.style.display = 'block'; }} />
+                <div id="sidebar-logo-fallback" className="hidden bg-gradient-to-br from-indigo-500 to-blue-600 p-2.5 rounded-xl shadow-lg shadow-indigo-500/20"><Layers size={24} className="text-white"/></div>
+             </div>
           </div>
           {!isCollapsed && (
             <div className="overflow-hidden whitespace-nowrap">
@@ -134,6 +120,9 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
              <LogOut size={20} className={isCollapsed ? '' : 'mr-3'}/>
              {!isCollapsed && <span>Sair</span>}
           </button>
+          <button onClick={() => setIsCollapsed(!isCollapsed)} className="hidden md:flex items-center justify-center w-full mt-4 p-2 text-slate-500 hover:text-white transition-colors">
+             {isCollapsed ? <ChevronRight size={18}/> : <ChevronLeft size={18}/>}
+          </button>
         </div>
       </aside>
 
@@ -146,30 +135,12 @@ const AppContent: React.FC<{ user: User, onLogout: () => void }> = ({ user, onLo
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [isPublicBooking, setIsPublicBooking] = useState(false);
-
   useEffect(() => {
-      // Check if it's a public booking URL
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('booking')) {
-          setIsPublicBooking(true);
-      } else {
-          const stored = localStorage.getItem('tuesday_current_user');
-          if (stored) setUser(JSON.parse(stored));
-      }
+      const stored = localStorage.getItem('tuesday_current_user');
+      if (stored) setUser(JSON.parse(stored));
   }, []);
-
-  if (isPublicBooking) {
-      return (
-          <ErrorBoundary>
-              <PublicBooking />
-          </ErrorBoundary>
-      );
-  }
-
   const handleLogin = (u: User) => setUser(u);
   const handleLogout = () => { api.logout(); setUser(null); };
-
   return (
     <ErrorBoundary>
         {!user ? <Auth onLogin={handleLogin} /> : <AppContent user={user} onLogout={handleLogout} />}

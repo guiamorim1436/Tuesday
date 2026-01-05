@@ -3,8 +3,7 @@ import { supabase, isConfigured } from '../lib/supabaseClient';
 import { 
   Task, Client, Partner, Transaction, User, SLATier, ServiceCategory, 
   CompanySettings, GoogleSettings, TaskTemplateGroup, Playbook, 
-  TaskStatus, TaskPriority, ClientStatus, PlaybookBlock,
-  WorkConfig, CustomFieldDefinition
+  TaskStatus, TaskPriority, ClientStatus, PlaybookBlock 
 } from '../types';
 
 // Helper functions for data transformation
@@ -104,7 +103,6 @@ export const api = {
 
     updateTask: async (task: Task): Promise<Task> => {
         if (isConfigured) {
-            // Corrected property access to camelCase in accordance with Task interface
             const payload = {
                 title: task.title, 
                 description: task.description, 
@@ -120,8 +118,8 @@ export const api = {
                 subscribers: task.subscribers || [],
                 auto_sla: task.autoSla, 
                 custom_fields: task.customFields || {},
-                is_tracking_time: task.isTrackingTime, 
-                last_time_log_start: task.lastTimeLogStart,
+                is_tracking_time: task.is_tracking_time, 
+                last_time_log_start: task.last_time_log_start,
                 external_id: task.externalId, 
                 meet_link: task.meetLink
             };
@@ -279,13 +277,12 @@ export const api = {
 
     updatePartner: async (partner: Partial<Partner>): Promise<Partner> => {
         if (isConfigured && partner.id) {
-            // Corrected property access to camelCase in accordance with Partner interface
             const payload = { 
                 name: partner.name, 
                 implementation_fee: partner.implementationFee, 
                 implementation_days: partner.implementationDays, 
                 cost_per_seat: partner.costPerSeat, 
-                custom_fields: partner.customFields || {}
+                custom_fields: partner.custom_fields || {}
             };
             const { data, error } = await supabase.from('partners').update(payload).eq('id', partner.id).select().single();
             if (error) throw error;
@@ -643,7 +640,7 @@ export const api = {
                 estimated_hours: toNumeric(t.estimatedHours), 
                 auto_sla: t.autoSla ?? true,
                 external_id: t.externalId, 
-                meet_link: t.meet_link
+                meet_link: t.meetLink
             }));
             const { error } = await supabase.from('tasks').insert(payloads);
             if (error) throw error;
