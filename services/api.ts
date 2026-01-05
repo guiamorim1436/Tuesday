@@ -1,5 +1,4 @@
 
-
 import { supabase, isConfigured } from '../lib/supabaseClient';
 import { 
   Task, Client, Partner, Transaction, User, SLATier, ServiceCategory, 
@@ -7,6 +6,11 @@ import {
   TaskStatus, TaskPriority, ClientStatus, PlaybookBlock,
   WorkConfig, CustomFieldDefinition
 } from '../types';
+import { 
+  MOCK_TASKS, MOCK_CLIENTS, MOCK_PARTNERS, MOCK_TRANSACTIONS, 
+  MOCK_USERS, DEFAULT_SLA_TIERS, DEFAULT_WORK_CONFIG, 
+  DEFAULT_CATEGORIES, DEFAULT_TASK_TEMPLATES 
+} from '../constants';
 
 // Helper functions for data transformation
 const toUUID = (id?: string) => id || null;
@@ -56,7 +60,7 @@ export const api = {
                 meetLink: t.meet_link
             }));
         }
-        return [];
+        return MOCK_TASKS;
     },
 
     createTask: async (task: Partial<Task>): Promise<Task> => {
@@ -100,12 +104,11 @@ export const api = {
                  comments: []
              };
         }
-        throw new Error("Supabase not configured");
+        return { ...task, id: Math.random().toString() } as Task;
     },
 
     updateTask: async (task: Task): Promise<Task> => {
         if (isConfigured) {
-            // Corrected property access to camelCase in accordance with Task interface
             const payload = {
                 title: task.title, 
                 description: task.description, 
@@ -169,7 +172,7 @@ export const api = {
                 customFields: c.custom_fields || {} 
             }));
         }
-        return [];
+        return MOCK_CLIENTS;
     },
 
     createClient: async (client: Partial<Client>): Promise<Client> => {
@@ -183,7 +186,7 @@ export const api = {
                 health_score: client.healthScore, 
                 has_implementation: client.hasImplementation, 
                 billing_day: client.billingDay, 
-                custom_fields: client.custom_fields || {}
+                custom_fields: client.customFields || {}
             };
             const { data, error } = await supabase.from('clients').insert([payload]).select().single();
             if (error) throw error;
@@ -199,7 +202,7 @@ export const api = {
                 customFields: data.custom_fields || {}
             };
         }
-        throw new Error("Supabase not configured");
+        return { ...client, id: Math.random().toString() } as Client;
     },
 
     updateClient: async (client: Partial<Client>): Promise<Client> => {
@@ -213,7 +216,7 @@ export const api = {
                 health_score: client.healthScore, 
                 has_implementation: client.hasImplementation, 
                 billing_day: client.billingDay, 
-                custom_fields: client.custom_fields || {}
+                custom_fields: client.customFields || {}
             };
             const { data, error } = await supabase.from('clients').update(payload).eq('id', client.id).select().single();
             if (error) throw error;
@@ -229,7 +232,7 @@ export const api = {
                 customFields: data.custom_fields || {}
             };
         }
-        throw new Error("ID required");
+        return client as Client;
     },
 
     deleteClientsBulk: async (ids: string[]): Promise<void> => {
@@ -253,7 +256,7 @@ export const api = {
                 customFields: p.custom_fields || {} 
             }));
         }
-        return [];
+        return MOCK_PARTNERS;
     },
 
     createPartner: async (partner: Partial<Partner>): Promise<Partner> => {
@@ -263,7 +266,7 @@ export const api = {
                 implementation_fee: partner.implementationFee, 
                 implementation_days: partner.implementationDays, 
                 cost_per_seat: partner.costPerSeat, 
-                custom_fields: partner.custom_fields || {}
+                custom_fields: partner.customFields || {}
             };
             const { data, error } = await supabase.from('partners').insert([payload]).select().single();
             if (error) throw error;
@@ -275,18 +278,17 @@ export const api = {
                 customFields: data.custom_fields || {}
             };
         }
-        throw new Error("Supabase not configured");
+        return { ...partner, id: Math.random().toString() } as Partner;
     },
 
     updatePartner: async (partner: Partial<Partner>): Promise<Partner> => {
         if (isConfigured && partner.id) {
-            // Corrected property access to camelCase in accordance with Partner interface
             const payload = { 
                 name: partner.name, 
                 implementation_fee: partner.implementationFee, 
                 implementation_days: partner.implementationDays, 
                 cost_per_seat: partner.costPerSeat, 
-                custom_fields: partner.custom_fields || {}
+                custom_fields: partner.customFields || {}
             };
             const { data, error } = await supabase.from('partners').update(payload).eq('id', partner.id).select().single();
             if (error) throw error;
@@ -298,7 +300,7 @@ export const api = {
                 customFields: data.custom_fields || {}
             };
         }
-        throw new Error("ID required");
+        return partner as Partner;
     },
 
     deletePartner: async (id: string): Promise<void> => {
@@ -326,7 +328,7 @@ export const api = {
                 customFields: tr.custom_fields || {} 
             }));
         }
-        return [];
+        return MOCK_TRANSACTIONS;
     },
 
     createTransaction: async (tr: Partial<Transaction>): Promise<Transaction> => {
@@ -342,13 +344,14 @@ export const api = {
                 installments: tr.installments, 
                 client_id: tr.clientId, 
                 partner_id: tr.partnerId, 
-                custom_fields: tr.custom_fields || {}
+                // Fix: Use the correct TypeScript property name customFields instead of custom_fields
+                custom_fields: tr.customFields || {}
             };
             const { data, error } = await supabase.from('transactions').insert([payload]).select().single();
             if (error) throw error;
             return { ...data, clientId: data.client_id, partnerId: data.partner_id, customFields: data.custom_fields || {} };
         }
-        throw new Error("Supabase not configured");
+        return { ...tr, id: Math.random().toString() } as Transaction;
     },
 
     deleteTransaction: async (id: string): Promise<void> => {
@@ -371,7 +374,7 @@ export const api = {
             if (error) throw error;
             return data || [];
         }
-        return [];
+        return DEFAULT_SLA_TIERS;
     },
 
     createSLATier: async (sla: Partial<SLATier>): Promise<SLATier> => {
@@ -380,7 +383,7 @@ export const api = {
             if (error) throw error;
             return data;
         }
-        throw new Error("Supabase not configured");
+        return { ...sla, id: Math.random().toString() } as SLATier;
     },
 
     deleteSLATier: async (id: string): Promise<void> => {
@@ -393,10 +396,10 @@ export const api = {
     getWorkConfig: async (): Promise<WorkConfig | null> => {
         if (isConfigured) {
             const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'work_config').single();
-            if (error) return null;
+            if (error) return DEFAULT_WORK_CONFIG;
             return data.value as WorkConfig;
         }
-        return null;
+        return DEFAULT_WORK_CONFIG;
     },
 
     getServiceCategories: async (): Promise<ServiceCategory[]> => {
@@ -405,7 +408,7 @@ export const api = {
             if (error) throw error;
             return data || [];
         }
-        return [];
+        return DEFAULT_CATEGORIES;
     },
 
     createServiceCategory: async (name: string, isBillable: boolean): Promise<ServiceCategory> => {
@@ -414,7 +417,7 @@ export const api = {
             if (error) throw error;
             return data;
         }
-        throw new Error("Supabase not configured");
+        return { id: Math.random().toString(), name, isBillable };
     },
 
     deleteServiceCategory: async (id: string): Promise<void> => {
@@ -439,7 +442,7 @@ export const api = {
             if (error) throw error;
             return data;
         }
-        throw new Error("Supabase not configured");
+        return { id: Math.random().toString(), name };
     },
 
     deleteTransactionCategory: async (id: string): Promise<void> => {
@@ -470,7 +473,7 @@ export const api = {
             if (error) throw error;
             return (data || []).map(u => ({ ...u, linkedEntityId: u.linked_entity_id }));
         }
-        return [];
+        return MOCK_USERS;
     },
 
     createUser: async (user: Partial<User>): Promise<User> => {
@@ -488,7 +491,7 @@ export const api = {
             if (error) throw error;
             return { ...data, linkedEntityId: data.linked_entity_id } as User;
         }
-        throw new Error("Supabase not configured");
+        return { ...user, id: Math.random().toString() } as User;
     },
 
     updateUser: async (user: User): Promise<User> => {
@@ -511,23 +514,23 @@ export const api = {
     getCompanySettings: async (): Promise<CompanySettings> => {
         if (isConfigured) {
             const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'company_settings').single();
-            if (error) return { name: '', cnpj: '', email: '', phone: '', address: '', website: '' };
+            if (error) return { name: 'Tuesday Demo', cnpj: '', email: '', phone: '', address: '', website: '' };
             return data.value as CompanySettings;
         }
-        return { name: '', cnpj: '', email: '', phone: '', address: '', website: '' };
+        return { name: 'Tuesday Demo', cnpj: '', email: '', phone: '', address: '', website: '' };
     },
 
     getUserProfile: async (): Promise<any> => {
-        return { name: 'Admin User', role: 'admin', email: 'admin@tuesday.com' };
+        return MOCK_USERS[0];
     },
 
     getTaskTemplates: async (): Promise<TaskTemplateGroup[]> => {
         if (isConfigured) {
             const { data, error } = await supabase.from('task_templates').select('*');
-            if (error) return [];
+            if (error) return DEFAULT_TASK_TEMPLATES;
             return data || [];
         }
-        return [];
+        return DEFAULT_TASK_TEMPLATES;
     },
 
     createTaskTemplateGroup: async (group: Partial<TaskTemplateGroup>): Promise<TaskTemplateGroup> => {
@@ -536,7 +539,7 @@ export const api = {
             if (error) throw error;
             return data;
         }
-        throw new Error("Supabase not configured");
+        return { ...group, id: Math.random().toString() } as TaskTemplateGroup;
     },
 
     updateTaskTemplateGroup: async (group: TaskTemplateGroup): Promise<TaskTemplateGroup> => {
@@ -564,6 +567,12 @@ export const api = {
             const { data, error } = await supabase.from('users').select('*').eq('email', email).eq('password', pass).eq('approved', true).single();
             if (error) return null;
             const u = { ...data, linkedEntityId: data.linked_entity_id } as User;
+            localStorage.setItem('tuesday_current_user', JSON.stringify(u));
+            return u;
+        }
+        // Demo Mode Bypass
+        if (email === 'admin@tuesday.com' || email === 'admin@nexus-os.com') {
+            const u = MOCK_USERS[0];
             localStorage.setItem('tuesday_current_user', JSON.stringify(u));
             return u;
         }
@@ -597,7 +606,7 @@ export const api = {
             if (error) throw error;
             return { ...data, clientId: data.client_id, updatedAt: data.updated_at };
         }
-        throw new Error("Supabase not configured");
+        return { ...p, id: Math.random().toString(), updatedAt: new Date().toISOString() } as Playbook;
     },
 
     updatePlaybook: async (p: Playbook): Promise<Playbook> => {
