@@ -7,9 +7,69 @@ import {
 import * as MOCK from '../constants';
 import { GoogleGenAI, Type } from "@google/genai";
 
-const toUUID = (id?: string) => (id && id.length > 10) ? id : null;
-
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// Helpers de Mapeamento para garantir integridade com o Banco
+const mapTaskToDb = (t: Partial<Task>) => ({
+    title: t.title,
+    description: t.description,
+    client_id: t.clientId,
+    status: t.status,
+    priority: t.priority,
+    start_date: t.startDate,
+    due_date: t.dueDate,
+    estimated_hours: t.estimatedHours,
+    actual_hours: t.actualHours,
+    is_tracking_time: t.isTrackingTime,
+    last_time_log_start: t.lastTimeLogStart,
+    assignees: t.assignees,
+    category: t.category,
+    subtasks: t.subtasks,
+    comments: t.comments,
+    attachments: t.attachments,
+    custom_fields: t.customFields
+});
+
+const mapDbToTask = (t: any): Task => ({
+    ...t,
+    clientId: t.client_id,
+    startDate: t.start_date,
+    dueDate: t.due_date,
+    estimatedHours: t.estimated_hours,
+    actualHours: t.actual_hours,
+    isTrackingTime: t.is_tracking_time,
+    lastTimeLogStart: t.last_time_log_start,
+    assignees: t.assignees || [],
+    subtasks: t.subtasks || [],
+    comments: t.comments || [],
+    attachments: t.attachments || []
+});
+
+const mapClientToDb = (c: Partial<Client>) => ({
+    name: c.name,
+    description: c.description,
+    status: c.status,
+    sla_tier_id: c.slaTierId,
+    partner_id: c.partnerId,
+    onboarding_date: c.onboardingDate,
+    health_score: c.healthScore,
+    hours_used_month: c.hoursUsedMonth,
+    billing_day: c.billingDay,
+    custom_fields: c.customFields,
+    comments: c.comments,
+    attachments: c.attachments
+});
+
+const mapDbToClient = (c: any): Client => ({
+    ...c,
+    slaTierId: c.sla_tier_id,
+    partnerId: c.partner_id,
+    onboardingDate: c.onboarding_date,
+    healthScore: c.health_score,
+    hoursUsedMonth: c.hours_used_month,
+    billingDay: c.billing_day,
+    customFields: c.custom_fields || {}
+});
 
 export const api = {
     initializeDatabase: async () => { if (isConfigured) console.log("🛡️ Tuesday Core Connected"); },
@@ -18,20 +78,7 @@ export const api = {
         if (!isConfigured) return MOCK.MOCK_TASKS;
         const { data, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
         if (error) return [];
-        return data.map(t => ({
-            ...t,
-            clientId: t.client_id,
-            startDate: t.start_date,
-            dueDate: t.due_date,
-            estimatedHours: t.estimated_hours,
-            actualHours: t.actual_hours,
-            isTrackingTime: t.is_tracking_time,
-            lastTime_log_start: t.last_time_log_start,
-            assignees: t.assignees || [],
-            subtasks: t.subtasks || [],
-            comments: t.comments || [],
-            attachments: t.attachments || []
-        }));
+        return data.map(mapDbToTask);
     },
 
     createTask: async (task: Partial<Task>): Promise<Task> => {
@@ -40,9 +87,20 @@ export const api = {
             MOCK.MOCK_TASKS.push(mockTask);
             return mockTask;
         }
-        const { data, error } = await supabase.from('tasks').insert([task]).select().single();
-        if (error) throw error;
-        return data;
+        
+        // Garantia de data de entrega mínima se não fornecida
+        if (!task.dueDate && task.startDate) {
+            const d = new Date(task.startDate);
+            d.setHours(d.getHours() + (task.estimatedHours || 4));
+            task.dueDate = d.toISOString();
+        }
+
+        const { data, error } = await supabase.from('tasks').insert([mapTaskToDb(task)]).select().single();
+        if (error) {
+            console.error("Erro ao criar tarefa:", error);
+            throw error;
+        }
+        return mapDbToTask(data);
     },
 
     updateTask: async (task: Task): Promise<Task> => {
@@ -51,9 +109,9 @@ export const api = {
             if(idx !== -1) MOCK.MOCK_TASKS[idx] = task;
             return task;
         }
-        const { data, error } = await supabase.from('tasks').update(task).eq('id', task.id).select().single();
+        const { data, error } = await supabase.from('tasks').update(mapTaskToDb(task)).eq('id', task.id).select().single();
         if (error) throw error;
-        return data;
+        return mapDbToTask(data);
     },
 
     deleteTask: async (id: string) => { 
@@ -70,8 +128,6 @@ export const api = {
         try {
             const { data } = await supabase.from('app_settings').select('value').eq('key', 'work_config').single();
             const fetchedConfig = data?.value;
-            
-            // Garantia Arquitetural: Se o banco retornar algo parcial, fazemos merge com o default
             return {
                 ...MOCK.DEFAULT_WORK_CONFIG,
                 ...fetchedConfig,
@@ -100,14 +156,17 @@ export const api = {
     getClients: async (): Promise<Client[]> => {
         if (!isConfigured) return MOCK.MOCK_CLIENTS;
         const { data } = await supabase.from('clients').select('*').order('name');
-        return data?.map(c => ({ ...c, slaTierId: c.sla_tier_id, partnerId: c.partner_id })) || [];
+        return data?.map(mapDbToClient) || [];
     },
 
     updateClient: async (client: Partial<Client>): Promise<Client> => {
         if (!isConfigured) return client as Client;
-        const { data, error } = await supabase.from('clients').update(client).eq('id', client.id).select().single();
-        if (error) throw error;
-        return data;
+        const { data, error } = await supabase.from('clients').upsert(mapClientToDb(client)).select().single();
+        if (error) {
+            console.error("Erro ao salvar cliente:", error);
+            throw error;
+        }
+        return mapDbToClient(data);
     },
 
     deleteClientsBulk: async (ids: string[]) => {
