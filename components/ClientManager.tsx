@@ -100,7 +100,6 @@ export const ClientManager: React.FC = () => {
       setSelectedIds(new Set());
   };
 
-  // Added handleDeletePartner function
   const handleDeletePartner = async (id: string) => {
     if (!confirm('Excluir este parceiro?')) return;
     try {

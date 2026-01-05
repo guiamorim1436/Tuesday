@@ -57,12 +57,48 @@ const LocalDB = {
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
+// HELPERS DE CONVERSÃO
 const toUUID = (val?: string | null) => (!val || val.trim() === '') ? null : val;
 const toDate = (val?: string | null) => (!val || val.trim() === '') ? null : val;
 const toNumeric = (val?: number | string | null) => {
     if (val === null || val === undefined || val === '') return 0;
     const num = Number(val);
     return isNaN(num) ? 0 : num;
+};
+
+// --- TIME PARSER LOGIC ---
+// Converte "1h 30m" para 1.5
+export const parseHumanTimeToDecimal = (input: string): number => {
+    if (!input) return 0;
+    const cleanInput = input.toLowerCase().replace(/,/g, '.').trim();
+    
+    // Caso seja apenas número (ex: "1.5")
+    if (!isNaN(Number(cleanInput))) return Number(cleanInput);
+
+    let hours = 0;
+    let minutes = 0;
+
+    const hourMatch = cleanInput.match(/(\d+(\.\d+)?)\s*h/);
+    const minMatch = cleanInput.match(/(\d+)\s*m/);
+
+    if (hourMatch) hours = parseFloat(hourMatch[1]);
+    if (minMatch) minutes = parseInt(minMatch[1]) / 60;
+
+    // Se não houver 'h' nem 'm' mas houver algo (ex: "90") assume minutos se for > 5 ou horas se < 5? 
+    // Melhor ser explícito. Se não deu match em nada, retorna o que for possível
+    return Number((hours + minutes).toFixed(2));
+};
+
+// Converte 1.5 para "1h 30m"
+export const formatDecimalToHumanTime = (decimal: number): string => {
+    if (!decimal || decimal <= 0) return "0m";
+    const hours = Math.floor(decimal);
+    const minutes = Math.round((decimal - hours) * 60);
+    
+    let result = "";
+    if (hours > 0) result += `${hours}h `;
+    if (minutes > 0) result += `${minutes}m`;
+    return result.trim();
 };
 
 export const api = {
@@ -201,11 +237,11 @@ export const api = {
                 healthScore: c.health_score,
                 hoursUsedMonth: c.hours_used_month,
                 billingDay: c.billing_day,
-                hasImplementation: c.has_implementation ?? true,
+                hasImplementation: c.has_implementation ?? false,
                 customFields: c.custom_fields
             }));
         }
-        return LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS).map(c => ({ ...c, hasImplementation: c.hasImplementation ?? true }));
+        return LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
     },
 
     createClient: async (client: Partial<Client>): Promise<Client> => {
@@ -219,7 +255,7 @@ export const api = {
                 health_score: toNumeric(client.healthScore),
                 hours_used_month: 0,
                 billing_day: toNumeric(client.billingDay),
-                has_implementation: client.hasImplementation,
+                has_implementation: client.hasImplementation || false,
                 custom_fields: client.customFields || {}
             };
             const { data, error } = await supabase.from('clients').insert([payload]).select().single();
@@ -239,7 +275,7 @@ export const api = {
             };
         }
         const clients = LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
-        const newClient = { ...client, id: generateId() } as Client;
+        const newClient = { ...client, id: generateId(), hoursUsedMonth: 0 } as Client;
         LocalDB.set(DB_KEYS.CLIENTS, [newClient, ...clients]);
         return newClient;
     },
@@ -307,7 +343,7 @@ export const api = {
                 onboarding_date: c.onboardingDate ? toDate(c.onboardingDate) : new Date(),
                 health_score: 100,
                 sla_tier_id: toUUID(c.slaTierId),
-                has_implementation: true,
+                has_implementation: c.hasImplementation || false,
                 custom_fields: {}
              }));
              const { data, error } = await supabase.from('clients').insert(payload).select();
@@ -317,7 +353,7 @@ export const api = {
              }));
         }
         const clients = LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
-        const newClients = clientsData.map(c => ({ ...c, id: generateId(), status: c.status || ClientStatus.ONBOARDING, hasImplementation: true } as Client));
+        const newClients = clientsData.map(c => ({ ...c, id: generateId(), status: c.status || ClientStatus.ONBOARDING } as Client));
         LocalDB.set(DB_KEYS.CLIENTS, [...newClients, ...clients]);
         return newClients;
     },
@@ -462,7 +498,7 @@ export const api = {
                  estimatedHours: t.estimated_hours,
                  actualHours: t.actual_hours,
                  autoSla: t.auto_sla ?? true,
-                 is_tracking_time: t.is_tracking_time,
+                 isTrackingTime: t.is_tracking_time,
                  lastTimeLogStart: t.last_time_log_start ? Number(t.last_time_log_start) : undefined,
                  assignee: t.assignee,
                  participants: t.participants || [],
@@ -473,11 +509,11 @@ export const api = {
                  comments: [] 
              }));
         }
-        return LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS).map(t => ({ ...t, autoSla: t.autoSla ?? true }));
+        return LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS).map(t => ({...t, autoSla: t.autoSla ?? true}));
     },
 
     createTask: async (task: Partial<Task>): Promise<Task> => {
-        // Only auto-schedule if autoSla is TRUE
+        // Lógica de agendamento automático apenas se autoSla estiver TRUE
         if (task.autoSla && !task.startDate) {
             const config = LocalDB.getObject<WorkConfig>(DB_KEYS.SETTINGS_WORK, DEFAULT_WORK_CONFIG);
             const today = new Date();
@@ -506,7 +542,7 @@ export const api = {
                  due_date: toDate(task.dueDate),
                  estimated_hours: toNumeric(task.estimatedHours),
                  assignee: task.assignee,
-                 auto_sla: task.autoSla,
+                 auto_sla: task.autoSla ?? true,
                  attachments: task.attachments || [],
                  custom_fields: task.customFields || {}
              };
@@ -527,7 +563,7 @@ export const api = {
         }
 
         const tasks = LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
-        const newTask = { ...task, id: generateId(), createdAt: new Date().toISOString(), subtasks: [], comments: [], attachments: [], actualHours: 0, participants: [], watchers: [] } as Task;
+        const newTask = { ...task, id: generateId(), createdAt: new Date().toISOString(), subtasks: [], comments: [], attachments: [], actualHours: 0 } as Task;
         LocalDB.set(DB_KEYS.TASKS, [newTask, ...tasks]);
         return newTask;
     },

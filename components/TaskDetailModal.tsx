@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-// Added Zap to the imports from lucide-react
-import { X, Calendar, Clock, CheckSquare, MessageSquare, Trash2, Save, User, Flag, ArrowRight, Paperclip, Send, Square, CheckCircle2, Loader2, Sparkles, Bot, Play, PauseCircle, Timer, ToggleLeft, ToggleRight, Layers, FileText, Download, Zap } from 'lucide-react';
+import { X, Calendar, Clock, CheckSquare, MessageSquare, Trash2, Save, User, Flag, ArrowRight, Paperclip, Send, Square, CheckCircle2, Loader2, Sparkles, Bot, Play, PauseCircle, Timer, ToggleLeft, ToggleRight, Layers, FileText, Download, Zap, Plus } from 'lucide-react';
 import { Task, TaskPriority, TaskStatus, Subtask, Comment, Attachment, ServiceCategory } from '../types';
-import { api } from '../services/api';
+import { api, parseHumanTimeToDecimal, formatDecimalToHumanTime } from '../services/api';
 
 interface TaskDetailModalProps {
   task: Task;
@@ -22,6 +21,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
   const [summary, setSummary] = useState<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
   
+  // UI State para tempo natural
+  const [humanActualHours, setHumanActualHours] = useState('');
+  const [humanEstimatedHours, setHumanEstimatedHours] = useState('');
+
   // Timer State
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -30,6 +33,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
 
   useEffect(() => {
     setEditedTask({ ...task, attachments: task.attachments || [] });
+    setHumanActualHours(formatDecimalToHumanTime(task.actualHours || 0));
+    setHumanEstimatedHours(formatDecimalToHumanTime(task.estimatedHours || 0));
     loadCategories();
   }, [task]);
 
@@ -40,7 +45,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
       } catch (e) { console.error(e); }
   };
 
-  // Time tracking logic...
+  // Time tracking logic
   useEffect(() => {
       calculateDisplayTime();
       if (editedTask.isTrackingTime) {
@@ -81,6 +86,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
           updatedTask.isTrackingTime = false;
           updatedTask.lastTimeLogStart = undefined;
       }
+      
+      // Sincronizar campo humano
+      setHumanActualHours(formatDecimalToHumanTime(updatedTask.actualHours));
       setEditedTask(updatedTask);
       try {
           const saved = await api.updateTask(updatedTask);
@@ -88,24 +96,39 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
       } catch (e) { console.error(e); }
   };
 
+  const handleHumanTimeBlur = (type: 'actual' | 'estimated') => {
+      if (type === 'actual') {
+          const decimal = parseHumanTimeToDecimal(humanActualHours);
+          setEditedTask({ ...editedTask, actualHours: decimal });
+          setHumanActualHours(formatDecimalToHumanTime(decimal));
+      } else {
+          const decimal = parseHumanTimeToDecimal(humanEstimatedHours);
+          setEditedTask({ ...editedTask, estimatedHours: decimal });
+          setHumanEstimatedHours(formatDecimalToHumanTime(decimal));
+      }
+  };
+
   const handleSave = async () => {
     setIsLoading(true);
     try {
         const updated = await api.updateTask(editedTask);
         onUpdate(updated);
-        alert('Tarefa salva!');
-    } catch (e) { alert('Erro ao salvar.'); } finally { setIsLoading(false); }
+        alert('Tarefa salva com sucesso!');
+    } catch (e) { 
+        alert('Erro ao salvar tarefa.'); 
+    } finally { 
+        setIsLoading(false); 
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
       
-      // Explicitly casting Array.from(files) to File[] to avoid unknown property errors
       const newAttachments: Attachment[] = (Array.from(files) as File[]).map(f => ({
           id: Math.random().toString(36).substring(7),
           name: f.name,
-          url: '#', // In production, this would be a URL from storage
+          url: '#', 
           type: f.type,
           size: (f.size / 1024).toFixed(1) + ' KB',
           createdAt: new Date().toISOString()
@@ -130,7 +153,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
 
   const toggleSubtask = async (subId: string, currentStatus: boolean) => {
       const newStatus = !currentStatus;
-      setEditedTask(prev => ({ ...prev, subtasks: prev.subtasks.map(s => s.id === subId ? { ...s, completed: newStatus } : s) }));
+      setEditedTask(prev => ({ ...prev, subtasks: prev.subtasks.map(s => { s.id === subId ? { ...s, completed: newStatus } : s }) }));
       await api.toggleSubtask(subId, newStatus);
   };
 
@@ -146,8 +169,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200">
         
+        {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-start bg-slate-50">
             <div className="flex-1 mr-4">
                 <input 
@@ -157,15 +181,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
                     placeholder="Título da Tarefa"
                 />
                 <div className="flex items-center space-x-3 mt-2">
-                    <select className="text-xs font-bold uppercase px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 outline-none" value={editedTask.status} onChange={e => setEditedTask({...editedTask, status: e.target.value})}>
+                    <select className="text-[10px] font-bold uppercase px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 outline-none" value={editedTask.status} onChange={e => setEditedTask({...editedTask, status: e.target.value})}>
                         {Object.values(TaskStatus).map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <select className="text-xs font-bold uppercase px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 outline-none" value={editedTask.priority} onChange={e => setEditedTask({...editedTask, priority: e.target.value as TaskPriority})}>
+                    <select className="text-[10px] font-bold uppercase px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 outline-none" value={editedTask.priority} onChange={e => setEditedTask({...editedTask, priority: e.target.value as TaskPriority})}>
                         {Object.values(TaskPriority).map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
-                    <div className="flex items-center text-xs font-bold text-slate-400 uppercase tracking-wide bg-white px-2 py-1 rounded border border-slate-200">
+                    <div className="flex items-center text-[10px] font-bold text-indigo-600 uppercase tracking-wide bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
                         <Layers size={12} className="mr-1.5"/>
                         <select className="bg-transparent border-none p-0 outline-none cursor-pointer" value={editedTask.category} onChange={e => setEditedTask({...editedTask, category: e.target.value})}>
+                            <option value="">Sem Categoria</option>
                             {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
                         </select>
                     </div>
@@ -187,7 +212,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
                         <div className="space-y-8">
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Descrição da Atividade</label>
-                                <textarea className="w-full min-h-[120px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-y text-sm leading-relaxed" placeholder="Adicione detalhes..." value={editedTask.description || ''} onChange={e => setEditedTask({...editedTask, description: e.target.value})} />
+                                <textarea className="w-full min-h-[160px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-y text-sm leading-relaxed" placeholder="Adicione detalhes, requisitos ou links importantes..." value={editedTask.description || ''} onChange={e => setEditedTask({...editedTask, description: e.target.value})} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Checklist de Entrega</label>
@@ -199,7 +224,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
                                         </div>
                                     ))}
                                 </div>
-                                <form onSubmit={handleAddSubtask} className="flex items-center"><PlusIcon className="text-slate-400 mr-3" size={20}/><input className="flex-1 bg-transparent border-none focus:ring-0 p-0 text-sm placeholder-slate-400 text-slate-700" placeholder="Adicionar etapa..." value={newSubtaskTitle} onChange={e => setNewSubtaskTitle(e.target.value)} /></form>
+                                <form onSubmit={handleAddSubtask} className="flex items-center group/add">
+                                    <div className="text-slate-400 mr-3 group-focus-within/add:text-indigo-500"><Plus size={20}/></div>
+                                    <input className="flex-1 bg-transparent border-none focus:ring-0 p-0 text-sm placeholder-slate-400 text-slate-700" placeholder="Adicionar etapa..." value={newSubtaskTitle} onChange={e => setNewSubtaskTitle(e.target.value)} />
+                                </form>
                             </div>
                         </div>
                     )}
@@ -254,9 +282,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
                                     </div>
                                 ))}
                                 {(!editedTask.attachments || editedTask.attachments.length === 0) && (
-                                    <div className="col-span-full py-12 text-center text-slate-400 border-2 border-dashed border-slate-100 rounded-2xl">
-                                        <Paperclip size={32} className="mx-auto mb-2 opacity-20"/>
+                                    <div className="col-span-full py-16 text-center text-slate-400 border-2 border-dashed border-slate-100 rounded-2xl">
+                                        <Paperclip size={32} className="mx-auto mb-2 opacity-10"/>
                                         <p className="text-sm">Nenhum anexo nesta tarefa.</p>
+                                        <p className="text-xs mt-1">Arraste arquivos aqui ou use o botão acima.</p>
                                     </div>
                                 )}
                             </div>
@@ -266,59 +295,85 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
             </div>
 
             <div className="w-80 bg-slate-50 p-6 flex flex-col border-l border-slate-200 overflow-y-auto custom-scrollbar">
-                <div className={`mb-6 p-4 rounded-xl border transition-all ${editedTask.isTrackingTime ? 'bg-indigo-600 border-indigo-500 shadow-lg' : 'bg-white border-slate-200'}`}>
+                {/* Time Tracker Section */}
+                <div className={`mb-6 p-4 rounded-2xl border transition-all ${editedTask.isTrackingTime ? 'bg-indigo-600 border-indigo-500 shadow-xl' : 'bg-white border-slate-200 shadow-sm'}`}>
                     <div className="flex justify-between items-center mb-2">
-                        <span className={`text-xs font-bold uppercase ${editedTask.isTrackingTime ? 'text-indigo-100' : 'text-slate-500'}`}>Time Tracker</span>
-                        <Timer size={16} className={editedTask.isTrackingTime ? 'text-indigo-100' : 'text-slate-400'}/>
+                        <span className={`text-[10px] font-bold uppercase tracking-widest ${editedTask.isTrackingTime ? 'text-indigo-100' : 'text-slate-500'}`}>Monitor de Tempo</span>
+                        <Timer size={14} className={editedTask.isTrackingTime ? 'text-indigo-100' : 'text-slate-400'}/>
                     </div>
                     <div className={`text-3xl font-mono font-bold mb-4 text-center ${editedTask.isTrackingTime ? 'text-white' : 'text-slate-700'}`}>{formatTime(elapsedSeconds)}</div>
-                    <button onClick={toggleTimer} className={`w-full py-2.5 rounded-lg font-bold text-sm flex items-center justify-center transition-all ${editedTask.isTrackingTime ? 'bg-rose-500 text-white' : 'bg-indigo-50 text-indigo-600'}`}>
+                    <button onClick={toggleTimer} className={`w-full py-2.5 rounded-xl font-bold text-sm flex items-center justify-center transition-all ${editedTask.isTrackingTime ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700'}`}>
                         {editedTask.isTrackingTime ? <><PauseCircle size={18} className="mr-2"/> Parar Timer</> : <><Play size={18} className="mr-2"/> Iniciar Timer</>}
                     </button>
                 </div>
 
                 <div className="space-y-6">
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    {/* SLA Control */}
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide flex items-center"><Zap size={14} className="mr-1.5 text-indigo-500"/> Início Automático</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center"><Zap size={12} className="mr-1.5 text-indigo-500"/> Início por SLA</span>
                             <button 
                                 onClick={() => setEditedTask({...editedTask, autoSla: !editedTask.autoSla})}
-                                className={`transition-colors ${editedTask.autoSla ? 'text-indigo-600' : 'text-slate-400'}`}
+                                className={`transition-colors ${editedTask.autoSla ? 'text-indigo-600' : 'text-slate-300'}`}
                             >
-                                {editedTask.autoSla ? <ToggleRight size={24}/> : <ToggleLeft size={24}/>}
+                                {editedTask.autoSla ? <ToggleRight size={28}/> : <ToggleLeft size={28}/>}
                             </button>
                         </div>
                         <div className="mt-3">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Data de Início</label>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-tight">Data de Início</label>
                             <input 
                                 type="date" 
-                                className={`w-full border rounded-lg px-3 py-2 text-sm text-slate-800 outline-none ${editedTask.autoSla ? 'bg-slate-100 cursor-not-allowed opacity-50' : 'bg-white border-slate-200'}`} 
+                                className={`w-full border rounded-xl px-3 py-2 text-sm text-slate-800 outline-none transition-all ${editedTask.autoSla ? 'bg-slate-100 cursor-not-allowed opacity-60 grayscale border-slate-100' : 'bg-white border-slate-200 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500'}`} 
                                 value={editedTask.startDate} 
                                 onChange={e => setEditedTask({...editedTask, startDate: e.target.value})}
                                 disabled={editedTask.autoSla}
+                            />
+                            {editedTask.autoSla && <p className="text-[9px] text-slate-400 mt-1 italic">* Definido automaticamente pelo sistema.</p>}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="flex items-center text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5"><Calendar size={14} className="mr-2"/> Prazo de Entrega</label>
+                        <input type="date" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all" value={editedTask.dueDate} onChange={e => setEditedTask({...editedTask, dueDate: e.target.value})} />
+                    </div>
+
+                    {/* Natural Time Inputs */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 tracking-widest">Estimado</label>
+                            <input 
+                                type="text" 
+                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all" 
+                                value={humanEstimatedHours} 
+                                onChange={e => setHumanEstimatedHours(e.target.value)}
+                                onBlur={() => handleHumanTimeBlur('estimated')}
+                                placeholder="ex: 1h 30m"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 tracking-widest">Tempo Real</label>
+                            <input 
+                                type="text" 
+                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all" 
+                                value={humanActualHours} 
+                                onChange={e => setHumanActualHours(e.target.value)}
+                                onBlur={() => handleHumanTimeBlur('actual')}
+                                placeholder="ex: 45m"
                             />
                         </div>
                     </div>
 
                     <div>
-                        <label className="flex items-center text-sm font-semibold text-slate-700 mb-1.5"><Calendar size={16} className="mr-2 text-slate-400"/> Prazo Final</label>
-                        <input type="date" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none" value={editedTask.dueDate} onChange={e => setEditedTask({...editedTask, dueDate: e.target.value})} />
+                        <label className="flex items-center text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5"><User size={14} className="mr-2"/> Responsável</label>
+                        <input className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all" value={editedTask.assignee || ''} onChange={e => setEditedTask({...editedTask, assignee: e.target.value})} placeholder="Nome do executor" />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Estimadas</label>
-                            <input type="number" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800" value={editedTask.estimatedHours} onChange={e => setEditedTask({...editedTask, estimatedHours: Number(e.target.value)})} />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Logs Reais</label>
-                            <input type="number" step="0.1" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800" value={editedTask.actualHours} onChange={e => setEditedTask({...editedTask, actualHours: Number(e.target.value)})} />
-                        </div>
+                    <div className="pt-4 space-y-3">
+                        <button onClick={handleSave} disabled={isLoading} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all transform hover:-translate-y-0.5 flex justify-center items-center">
+                            {isLoading ? <Loader2 size={18} className="animate-spin"/> : <><Save size={18} className="mr-2"/> Salvar Alterações</>}
+                        </button>
+                        <button onClick={() => { if(confirm('Excluir esta tarefa permanentemente?')) onDelete(editedTask.id); }} className="w-full py-2.5 text-rose-500 font-bold text-xs hover:bg-rose-50 rounded-xl transition-colors">Excluir Tarefa</button>
                     </div>
-
-                    <div><label className="flex items-center text-sm font-semibold text-slate-700 mb-1.5"><User size={16} className="mr-2 text-slate-400"/> Responsável</label><input className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none" value={editedTask.assignee || ''} onChange={e => setEditedTask({...editedTask, assignee: e.target.value})} placeholder="Responsável" /></div>
-
-                    <div className="pt-4"><button onClick={handleSave} disabled={isLoading} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl shadow-md hover:bg-indigo-700 transition-colors flex justify-center items-center">{isLoading ? <Loader2 size={18} className="animate-spin"/> : <><Save size={18} className="mr-2"/> Salvar Alterações</>}</button></div>
                 </div>
             </div>
         </div>
