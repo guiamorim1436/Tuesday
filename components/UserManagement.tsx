@@ -10,10 +10,12 @@ export const UserManagement: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentUser, setCurrentUser] = useState<Partial<User>>({
         permissions: {
-            tasks: { view: true, edit: true, delete: false },
-            clients: { view: true, edit: false, delete: false },
-            finance: { view: false, edit: false, delete: false },
-            settings: { view: false, edit: false }
+            // Fix: Added missing 'create' property to permissions and 'users' section to match UserPermissions interface
+            tasks: { view: true, edit: true, delete: false, create: true },
+            clients: { view: true, edit: false, delete: false, create: false },
+            finance: { view: false, edit: false, delete: false, create: false },
+            settings: { view: false, edit: false },
+            users: { view: false, edit: false }
         }
     });
 
@@ -42,7 +44,19 @@ export const UserManagement: React.FC = () => {
                     <h2 className="text-2xl font-bold text-slate-900">Gestão de Governança</h2>
                     <p className="text-sm text-slate-500 font-medium">Controle de acessos e permissões granulares</p>
                 </div>
-                <button onClick={() => { setCurrentUser({ permissions: { tasks: { view: true, edit: false, delete: false }, clients: { view: false, edit: false, delete: false }, finance: { view: false, edit: false, delete: false }, settings: { view: false, edit: false } } as any }); setIsModalOpen(true); }} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2"><Plus size={18}/> Novo Usuário</button>
+                <button onClick={() => { 
+                    // Fix: Updated initial permissions for new user creation to include 'create' and 'users' properties correctly
+                    setCurrentUser({ 
+                        permissions: { 
+                            tasks: { view: true, edit: false, delete: false, create: false }, 
+                            clients: { view: false, edit: false, delete: false, create: false }, 
+                            finance: { view: false, edit: false, delete: false, create: false }, 
+                            settings: { view: false, edit: false },
+                            users: { view: false, edit: false }
+                        } 
+                    }); 
+                    setIsModalOpen(true); 
+                }} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2"><Plus size={18}/> Novo Usuário</button>
             </div>
 
             <div className="p-8 h-full overflow-y-auto custom-scrollbar">
@@ -119,7 +133,7 @@ export const UserManagement: React.FC = () => {
                                     {Object.entries(currentUser.permissions || {}).map(([module, actions]) => (
                                         <div key={module} className="bg-slate-50 p-6 rounded-[24px] border border-slate-100">
                                             <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                                <Lock size={12} className="text-indigo-600"/> {module === 'tasks' ? 'Operações' : module === 'clients' ? 'Clientes' : module === 'finance' ? 'Financeiro' : 'Configurações'}
+                                                <Lock size={12} className="text-indigo-600"/> {module === 'tasks' ? 'Operações' : module === 'clients' ? 'Clientes' : module === 'finance' ? 'Financeiro' : module === 'settings' ? 'Configurações' : 'Usuários'}
                                             </h5>
                                             <div className="flex flex-wrap gap-4">
                                                 {Object.entries(actions).map(([action, active]) => (
@@ -131,7 +145,8 @@ export const UserManagement: React.FC = () => {
                                                         }`}
                                                     >
                                                         {active ? <Check size={12}/> : <Eye size={12}/>}
-                                                        {action === 'view' ? 'Ver' : action === 'edit' ? 'Editar' : 'Excluir'}
+                                                        {/* Fix: Added localized labels for actions including 'create' */}
+                                                        {action === 'view' ? 'Ver' : action === 'edit' ? 'Editar' : action === 'delete' ? 'Excluir' : 'Criar'}
                                                     </button>
                                                 ))}
                                             </div>
