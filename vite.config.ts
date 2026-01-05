@@ -1,18 +1,17 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Carrega variáveis de ambiente baseadas no modo (development/production)
-  const env = loadEnv(mode, '.', '');
+  // Fix: Cast process to any to bypass the "Property 'cwd' does not exist on type 'Process'" TypeScript error
+  const env = loadEnv(mode, (process as any).cwd(), '');
 
   return {
     plugins: [react()],
-    // 'base: ./' garante que o app funcione mesmo se não estiver na raiz do domínio
     base: './', 
     define: {
-      // Isso corrige o erro "process is not defined" que causa a tela branca
-      'process.env': env
+      // Injeta variáveis de ambiente de forma segura
+      'process.env': JSON.stringify(env),
+      'global': 'window'
     },
     server: {
       host: true,
@@ -21,7 +20,10 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
-      sourcemap: false, // Desativa sourcemaps em produção para economizar espaço
+      sourcemap: false,
+      rollupOptions: {
+        external: ['react', 'react-dom'],
+      }
     }
   };
 });
