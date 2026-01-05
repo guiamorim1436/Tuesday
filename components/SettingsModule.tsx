@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Terminal, AlertTriangle, Building, Save, SquarePen, Loader2, Clock, CalendarDays, BarChart2, Coffee, Database, BellRing, Sparkles, BrainCircuit, CheckCircle2, XCircle, Share2, Globe, CalendarRange } from 'lucide-react';
+import { User, Terminal, AlertTriangle, Building, Save, SquarePen, Loader2, Clock, CalendarDays, BarChart2, Coffee, Database, BellRing, Sparkles, BrainCircuit, CheckCircle2, XCircle, Share2, Globe, CalendarRange, KeyRound, ShieldAlert } from 'lucide-react';
 import { CompanySettings, CustomFieldDefinition, WorkConfig, GoogleSettings, ServiceCategory } from '../types';
 import { DEFAULT_CUSTOM_FIELDS } from '../constants';
 import { api } from '../services/api';
@@ -281,7 +281,7 @@ export const SettingsModule: React.FC = () => {
       slaOffsetLow: 5,
       blockHolidays: false
   });
-  const [googleSettings, setGoogleSettings] = useState<GoogleSettings>({ clientId: '', syncEnabled: false, defaultCategoryId: '' });
+  const [googleSettings, setGoogleSettings] = useState<GoogleSettings>({ clientId: '', clientSecret: '', syncEnabled: false, defaultCategoryId: '' });
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [userProfile, setUserProfile] = useState({ name: 'Admin User', role: 'CTO', email: 'admin@tuesday.com' });
 
@@ -453,7 +453,7 @@ export const SettingsModule: React.FC = () => {
               </div>
           )}
 
-          {/* AI STATUS HEADER (Shared) */}
+          {/* AI STATUS HEADER */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex items-center justify-between">
               <div className="flex items-center">
                   <div className={`p-3 rounded-2xl mr-4 ${aiStatus === 'active' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
@@ -473,41 +473,61 @@ export const SettingsModule: React.FC = () => {
 
           {activeSection === 'integrations' && (
               <div className="space-y-6 animate-in fade-in duration-300">
-                  <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Integrações de Terceiros</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Integrações de Terceiros</h3>
+                    <div className="flex items-center text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-100 text-xs font-bold">
+                        <ShieldAlert size={14} className="mr-2"/> Armazenamento de Chaves Sensíveis
+                    </div>
+                  </div>
                   
                   <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
                       <div className="flex items-center justify-between mb-6">
                           <h4 className="text-lg font-bold text-slate-800 flex items-center">
                               <CalendarRange size={22} className="mr-2 text-indigo-600"/> Google Calendar
                           </h4>
-                          <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${googleSettings.clientId ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                              {googleSettings.clientId ? 'Configurado' : 'Aguardando Setup'}
+                          <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${googleSettings.clientId && googleSettings.clientSecret ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                              {googleSettings.clientId && googleSettings.clientSecret ? 'Configuração Completa' : 'Aguardando Setup'}
                           </div>
                       </div>
 
-                      <div className="space-y-6">
+                      <div className="space-y-8">
                           <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl">
                               <h5 className="text-sm font-bold text-indigo-800 mb-1 flex items-center"><Globe size={14} className="mr-2"/> Como funciona?</h5>
                               <p className="text-xs text-indigo-700 leading-relaxed">
-                                  Ao configurar seu <b>Google Client ID</b>, você poderá importar eventos da sua agenda diretamente para o quadro de tarefas. 
-                                  Os eventos serão criados com a categoria definida abaixo.
+                                  Ao configurar seu <b>Google Client ID</b> e <b>Secret</b>, você habilita o fluxo OAuth2 completo. 
+                                  Isso permite que o sistema mantenha o acesso offline para sincronizar reuniões mesmo quando você não estiver com a aba aberta.
                               </p>
                           </div>
 
-                          <div>
-                              <label className="block text-sm font-bold text-slate-700 mb-1.5">Google OAuth Client ID</label>
-                              <input 
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono text-slate-600 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
-                                  placeholder="Ex: 123456789-abcdef.apps.googleusercontent.com"
-                                  value={googleSettings.clientId}
-                                  onChange={e => setGoogleSettings({...googleSettings, clientId: e.target.value})}
-                              />
-                              <p className="text-[10px] text-slate-400 mt-2">Crie suas credenciais em: <a href="https://console.cloud.google.com/" target="_blank" className="text-indigo-600 hover:underline">Google Cloud Console</a></p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center">
+                                    <KeyRound size={14} className="mr-1.5 text-slate-400"/> Google Client ID
+                                  </label>
+                                  <input 
+                                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono text-slate-600 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                                      placeholder="123456789-abcdef.apps.googleusercontent.com"
+                                      value={googleSettings.clientId}
+                                      onChange={e => setGoogleSettings({...googleSettings, clientId: e.target.value})}
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center">
+                                    <Terminal size={14} className="mr-1.5 text-slate-400"/> Google Client Secret
+                                  </label>
+                                  <input 
+                                      type="password"
+                                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono text-slate-600 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                                      placeholder="••••••••••••••••"
+                                      value={googleSettings.clientSecret}
+                                      onChange={e => setGoogleSettings({...googleSettings, clientSecret: e.target.value})}
+                                  />
+                              </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                               <div>
-                                  <label className="block text-sm font-bold text-slate-700 mb-1.5">Categoria Padrão de Sincronização</label>
+                                  <label className="block text-sm font-bold text-slate-700 mb-2">Categoria Padrão de Sincronização</label>
                                   <select 
                                       className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all appearance-none"
                                       value={googleSettings.defaultCategoryId}
@@ -520,10 +540,10 @@ export const SettingsModule: React.FC = () => {
                               <div className="flex items-end">
                                   <button 
                                       onClick={() => setGoogleSettings({...googleSettings, syncEnabled: !googleSettings.syncEnabled})}
-                                      className={`w-full flex items-center justify-between px-5 py-3 rounded-xl border font-bold text-sm transition-all ${googleSettings.syncEnabled ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-200'}`}
+                                      className={`w-full flex items-center justify-between px-5 py-3 rounded-xl border font-bold text-sm transition-all ${googleSettings.syncEnabled ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-400 border-slate-200'}`}
                                   >
-                                      Status da Sincronização
-                                      <span className="text-[10px] uppercase font-black">{googleSettings.syncEnabled ? 'Habilitada' : 'Desabilitada'}</span>
+                                      Sincronização Ativa
+                                      <span className="text-[10px] uppercase font-black px-2 py-1 rounded bg-black/10">{googleSettings.syncEnabled ? 'Habilitada' : 'Desabilitada'}</span>
                                   </button>
                               </div>
                           </div>
@@ -531,9 +551,9 @@ export const SettingsModule: React.FC = () => {
                           <div className="pt-4 flex justify-end">
                               <button 
                                   onClick={handleSaveGoogleSettings} 
-                                  className="bg-slate-800 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-slate-900 transition-all flex items-center"
+                                  className="bg-slate-800 text-white px-10 py-3.5 rounded-xl font-bold shadow-xl hover:bg-slate-900 transition-all flex items-center transform active:scale-95"
                               >
-                                  <Save size={18} className="mr-2"/> Salvar Integração
+                                  <Save size={18} className="mr-2"/> Atualizar Integrações
                               </button>
                           </div>
                       </div>
@@ -621,7 +641,6 @@ export const SettingsModule: React.FC = () => {
               </div>
           )}
           
-          {/* Rest of sections (Database, Profile, etc.) remain unchanged... */}
           {activeSection === 'database' && (
               <div className="animate-in fade-in duration-300">
                   <h3 className="text-2xl font-bold text-slate-800 mb-6 tracking-tight">Instalação do Banco de Dados</h3>

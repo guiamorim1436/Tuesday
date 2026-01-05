@@ -186,7 +186,6 @@ export const api = {
     },
     updateClient: async (client: Partial<Client>): Promise<Client> => {
         if (isConfigured && client.id) {
-            // Fix: Corrected client.custom_fields to client.customFields (camelCase in TS interface)
             const payload = { name: client.name, status: client.status, sla_tier_id: toUUID(client.slaTierId), partner_id: toUUID(client.partnerId), onboarding_date: toDate(client.onboardingDate), health_score: toNumeric(client.healthScore), billing_day: toNumeric(client.billingDay), has_implementation: client.hasImplementation, custom_fields: client.customFields || {} };
             const { data, error } = await supabase.from('clients').update(payload).eq('id', client.id).select().single();
             if (error) throw error;
@@ -251,7 +250,6 @@ export const api = {
     },
     updatePartner: async (partner: Partial<Partner>): Promise<Partner> => {
         if (isConfigured && partner.id) {
-            // Fix: Corrected partner.custom_fields to partner.customFields (camelCase in TS interface)
             const payload = { name: partner.name, implementation_fee: toNumeric(partner.implementationFee), implementation_days: toNumeric(partner.implementationDays), cost_per_seat: toNumeric(partner.costPerSeat), billing_day: toNumeric(partner.billingDay), custom_fields: partner.customFields || {} };
             const { data, error } = await supabase.from('partners').update(payload).eq('id', partner.id).select().single();
             if (error) throw error;
@@ -451,7 +449,7 @@ export const api = {
             const { data } = await supabase.from('app_settings').select('value').eq('key', 'google_settings').single();
             if (data) return data.value;
         }
-        return LocalDB.getObject<GoogleSettings>(DB_KEYS.SETTINGS_GOOGLE, { clientId: '', syncEnabled: false, defaultCategoryId: '' });
+        return LocalDB.getObject<GoogleSettings>(DB_KEYS.SETTINGS_GOOGLE, { clientId: '', clientSecret: '', syncEnabled: false, defaultCategoryId: '' });
     },
     saveGoogleSettings: async (settings: GoogleSettings) => {
         if (isConfigured) {

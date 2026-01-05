@@ -176,6 +176,7 @@ export interface WorkConfig {
 
 export interface GoogleSettings {
     clientId: string;
+    clientSecret: string; // New: Added Secret
     syncEnabled: boolean;
     defaultCategoryId: string;
 }
