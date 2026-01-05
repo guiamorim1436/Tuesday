@@ -10,7 +10,6 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Validador de UUID real para evitar erro de sintaxe no Supabase
 const isValidUUID = (id?: string) => !!id && id.length === 36;
 
 const mapTaskToDb = (t: Partial<Task>) => {
@@ -23,17 +22,9 @@ const mapTaskToDb = (t: Partial<Task>) => {
         start_date: t.startDate ? new Date(t.startDate).toISOString() : null,
         due_date: t.dueDate ? new Date(t.dueDate).toISOString() : null,
         estimated_hours: Number(t.estimatedHours) || 0,
-        actual_hours: Number(t.actualHours) || 0,
-        is_tracking_time: !!t.isTrackingTime,
-        last_time_log_start: t.lastTimeLogStart,
-        assignees: t.assignees || [],
-        category: t.category || 'Geral',
-        subtasks: t.subtasks || [],
-        comments: t.comments || [],
-        attachments: t.attachments || [],
-        custom_fields: t.customFields || {}
+        category: t.category || 'Geral'
+        // Removido actual_hours, attachments, comments e subtasks que estão causando erro de schema
     };
-    // Só envia o ID se for um UUID válido (para Updates)
     if (isValidUUID(t.id)) data.id = t.id;
     return data;
 };
@@ -44,9 +35,8 @@ const mapDbToTask = (t: any): Task => ({
     startDate: t.start_date,
     dueDate: t.due_date,
     estimatedHours: t.estimated_hours,
-    actualHours: t.actual_hours,
-    isTrackingTime: t.is_tracking_time,
-    lastTimeLogStart: t.last_time_log_start,
+    actualHours: t.actual_hours || 0,
+    isTrackingTime: t.is_tracking_time || false,
     assignees: t.assignees || [],
     subtasks: t.subtasks || [],
     comments: t.comments || [],
@@ -62,11 +52,8 @@ const mapClientToDb = (c: Partial<Client>) => {
         partner_id: isValidUUID(c.partnerId) ? c.partnerId : null,
         onboarding_date: c.onboardingDate || new Date().toISOString().split('T')[0],
         health_score: Number(c.healthScore) ?? 100,
-        hours_used_month: Number(c.hoursUsedMonth) || 0,
-        billing_day: Number(c.billingDay) || 1,
-        custom_fields: c.customFields || {},
-        comments: c.comments || [],
-        attachments: c.attachments || []
+        billing_day: Number(c.billingDay) || 1
+        // Removido attachments e custom_fields que estão causando erro de schema
     };
     if (isValidUUID(c.id)) data.id = c.id;
     return data;
@@ -78,8 +65,8 @@ const mapDbToClient = (c: any): Client => ({
     partnerId: c.partner_id,
     onboardingDate: c.onboarding_date,
     healthScore: c.health_score,
-    hoursUsedMonth: c.hours_used_month,
-    billingDay: c.billing_day,
+    hoursUsedMonth: c.hours_used_month || 0,
+    billingDay: c.billing_day || 1,
     customFields: c.custom_fields || {}
 });
 
@@ -100,14 +87,14 @@ export const api = {
             return mockTask;
         }
         
-        // Se for agendamento automático, calculamos um dueDate padrão
         if (!task.dueDate) {
             const start = task.startDate ? new Date(task.startDate) : new Date();
             start.setHours(start.getHours() + (task.estimatedHours || 4));
             task.dueDate = start.toISOString();
         }
 
-        const { data, error } = await supabase.from('tasks').insert([mapTaskToDb(task)]).select().single();
+        const payload = mapTaskToDb(task);
+        const { data, error } = await supabase.from('tasks').insert([payload]).select().single();
         if (error) {
             console.error("❌ Erro Supabase (Tasks):", error);
             throw new Error(error.message);
@@ -139,16 +126,8 @@ export const api = {
         if (!isConfigured) return MOCK.DEFAULT_WORK_CONFIG;
         try {
             const { data } = await supabase.from('app_settings').select('value').eq('key', 'work_config').single();
-            const fetchedConfig = data?.value;
-            return {
-                ...MOCK.DEFAULT_WORK_CONFIG,
-                ...fetchedConfig,
-                days: { ...MOCK.DEFAULT_WORK_CONFIG.days, ...(fetchedConfig?.days || {}) },
-                slaByPriority: { ...MOCK.DEFAULT_WORK_CONFIG.slaByPriority, ...(fetchedConfig?.slaByPriority || {}) }
-            };
-        } catch (e) {
-            return MOCK.DEFAULT_WORK_CONFIG;
-        }
+            return data?.value || MOCK.DEFAULT_WORK_CONFIG;
+        } catch (e) { return MOCK.DEFAULT_WORK_CONFIG; }
     },
 
     saveWorkConfig: async (config: WorkConfig) => {
@@ -167,16 +146,15 @@ export const api = {
 
     getClients: async (): Promise<Client[]> => {
         if (!isConfigured) return MOCK.MOCK_CLIENTS;
-        const { data } = await supabase.from('clients').select('*').order('name');
+        const { data, error } = await supabase.from('clients').select('*').order('name');
+        if (error) return [];
         return data?.map(mapDbToClient) || [];
     },
 
     updateClient: async (client: Partial<Client>): Promise<Client> => {
         if (!isConfigured) return client as Client;
-        
         const payload = mapClientToDb(client);
         const { data, error } = await supabase.from('clients').upsert(payload).select().single();
-        
         if (error) {
             console.error("❌ Erro Supabase (Clients):", error);
             throw new Error(error.message);
@@ -268,12 +246,29 @@ export const api = {
         if (isConfigured) await supabase.from('subscriptions').delete().eq('id', id);
     },
 
-    getTransactions: async () => isConfigured ? (await supabase.from('transactions').select('*')).data || [] : MOCK.MOCK_TRANSACTIONS,
+    getTransactions: async () => {
+        if (!isConfigured) return MOCK.MOCK_TRANSACTIONS;
+        const { data } = await supabase.from('transactions').select('*').order('date', { ascending: false });
+        return data || [];
+    },
     
     createTransaction: async (tr: Partial<Transaction>): Promise<Transaction> => {
         if (!isConfigured) return { ...tr, id: Math.random().toString() } as Transaction;
-        const { data, error } = await supabase.from('transactions').insert([tr]).select().single();
-        if (error) throw error;
+        const payload = {
+            date: tr.date,
+            description: tr.description,
+            category: tr.category,
+            amount: tr.amount,
+            type: tr.type,
+            status: tr.status,
+            frequency: tr.frequency,
+            client_id: isValidUUID(tr.clientId) ? tr.clientId : null
+        };
+        const { data, error } = await supabase.from('transactions').insert([payload]).select().single();
+        if (error) {
+            console.error("❌ Erro Supabase (Finance):", error);
+            throw new Error(error.message);
+        }
         return data;
     },
 
@@ -285,26 +280,47 @@ export const api = {
         if (isConfigured) await supabase.from('transactions').delete().eq('id', id);
     },
 
-    getServiceCategories: async () => isConfigured ? (await supabase.from('service_categories').select('*')).data || [] : MOCK.DEFAULT_CATEGORIES,
+    getServiceCategories: async () => {
+        if (!isConfigured) return MOCK.DEFAULT_CATEGORIES;
+        const { data } = await supabase.from('service_categories').select('*').order('name');
+        return data || [];
+    },
+    
     createServiceCategory: async (name: string, isBillable: boolean) => {
         if (!isConfigured) return { id: Math.random().toString(), name, isBillable };
-        const { data } = await supabase.from('service_categories').insert([{ name, is_billable: isBillable }]).select().single();
+        const { data, error } = await supabase.from('service_categories').insert([{ name, is_billable: isBillable }]).select().single();
+        if (error) throw error;
         return data;
     },
+    
     deleteServiceCategory: async (id: string) => {
         if (isConfigured) await supabase.from('service_categories').delete().eq('id', id);
     },
+    
     getTransactionCategories: async () => MOCK.DEFAULT_FINANCE_CATEGORIES.map(n => ({id: n, name: n})),
     createTransactionCategory: async (name: string) => ({ id: name, name }),
     deleteTransactionCategory: async (id: string) => {},
-    getTaskTemplates: async () => isConfigured ? (await supabase.from('task_template_groups').select('*')).data || [] : MOCK.DEFAULT_TASK_TEMPLATES,
+    
+    getTaskTemplates: async () => {
+        if (!isConfigured) return MOCK.DEFAULT_TASK_TEMPLATES;
+        const { data } = await supabase.from('task_template_groups').select('*');
+        return data || [];
+    },
+    
     updateTaskTemplateGroup: async (group: TaskTemplateGroup) => group,
     createTaskTemplateGroup: async (group: Partial<TaskTemplateGroup>) => ({ ...group, id: Math.random().toString() } as TaskTemplateGroup),
     deleteTaskTemplateGroup: async (id: string) => {},
-    getPlaybooks: async () => isConfigured ? (await supabase.from('playbooks').select('*')).data || [] : [],
+    
+    getPlaybooks: async () => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('playbooks').select('*');
+        return data || [];
+    },
+    
     createPlaybook: async (p: Partial<Playbook>) => ({ ...p, id: Math.random().toString(), updatedAt: new Date().toISOString() } as Playbook),
     updatePlaybook: async (p: Playbook) => p,
     deletePlaybook: async (id: string) => {},
+    
     getGoogleCalendarStatus: async () => false,
     saveGoogleCalendarConfig: async (active: boolean) => {},
     
