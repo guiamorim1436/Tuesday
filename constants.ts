@@ -1,5 +1,4 @@
 
-
 import { Client, ClientStatus, Partner, Task, TaskPriority, TaskStatus, FinanceMetric, CustomFieldDefinition, Transaction, ServiceCategory, SLATier, WorkConfig, User, CatalogItem, Proposal, Lead, CRMStage, TaskTemplateGroup } from './types';
 
 // Custom Fields Configuration
@@ -39,13 +38,11 @@ export const DEFAULT_SLA_TIERS: SLATier[] = [
 ];
 
 // Default Work Config
-// Fixed: Added missing maxMeetingsPerDay property to satisfy WorkConfig interface
 export const DEFAULT_WORK_CONFIG: WorkConfig = {
   workDays: [1, 2, 3, 4, 5], // Mon-Fri
   workHoursStart: "09:00",
   workHoursEnd: "18:00",
   maxTasksPerDay: 4,
-  maxMeetingsPerDay: 4,
   maxCriticalPerDay: 1,
   maxHighPerDay: 2,
   slaOffsetCritical: 0,

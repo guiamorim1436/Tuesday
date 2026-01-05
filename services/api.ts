@@ -1,5 +1,4 @@
 
-
 import { supabase, isConfigured } from '../lib/supabaseClient';
 import { 
   Task, Client, Partner, Transaction, User, SLATier, ServiceCategory, 
@@ -183,7 +182,7 @@ export const api = {
                 health_score: client.healthScore, 
                 has_implementation: client.hasImplementation, 
                 billing_day: client.billingDay, 
-                custom_fields: client.custom_fields || {}
+                custom_fields: client.customFields || {}
             };
             const { data, error } = await supabase.from('clients').insert([payload]).select().single();
             if (error) throw error;
@@ -213,7 +212,7 @@ export const api = {
                 health_score: client.healthScore, 
                 has_implementation: client.hasImplementation, 
                 billing_day: client.billingDay, 
-                custom_fields: client.custom_fields || {}
+                custom_fields: client.customFields || {}
             };
             const { data, error } = await supabase.from('clients').update(payload).eq('id', client.id).select().single();
             if (error) throw error;
@@ -263,7 +262,7 @@ export const api = {
                 implementation_fee: partner.implementationFee, 
                 implementation_days: partner.implementationDays, 
                 cost_per_seat: partner.costPerSeat, 
-                custom_fields: partner.custom_fields || {}
+                custom_fields: partner.customFields || {}
             };
             const { data, error } = await supabase.from('partners').insert([payload]).select().single();
             if (error) throw error;
@@ -286,7 +285,7 @@ export const api = {
                 implementation_fee: partner.implementationFee, 
                 implementation_days: partner.implementationDays, 
                 cost_per_seat: partner.costPerSeat, 
-                custom_fields: partner.custom_fields || {}
+                custom_fields: partner.customFields || {}
             };
             const { data, error } = await supabase.from('partners').update(payload).eq('id', partner.id).select().single();
             if (error) throw error;
@@ -342,7 +341,7 @@ export const api = {
                 installments: tr.installments, 
                 client_id: tr.clientId, 
                 partner_id: tr.partnerId, 
-                custom_fields: tr.custom_fields || {}
+                custom_fields: tr.customFields || {}
             };
             const { data, error } = await supabase.from('transactions').insert([payload]).select().single();
             if (error) throw error;
@@ -644,7 +643,7 @@ export const api = {
                 estimated_hours: toNumeric(t.estimatedHours), 
                 auto_sla: t.autoSla ?? true,
                 external_id: t.externalId, 
-                meet_link: t.meetLink
+                meet_link: t.meet_link
             }));
             const { error } = await supabase.from('tasks').insert(payloads);
             if (error) throw error;

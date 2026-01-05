@@ -1,5 +1,4 @@
 
-
 export enum TaskPriority {
   CRITICAL = 'Crítica',
   HIGH = 'Alta',
@@ -105,46 +104,35 @@ export interface Partner {
   customFields: Record<string, any>;
 }
 
-export interface WorkConfig {
-  workDays: number[];
-  workHoursStart: string;
-  workHoursEnd: string;
-  maxTasksPerDay: number;
-  maxMeetingsPerDay: number; // Novo campo
-  maxCriticalPerDay: number;
-  maxHighPerDay: number;
-  slaOffsetCritical: number;
-  slaOffsetHigh: number;
-  slaOffsetMedium: number;
-  slaOffsetLow: number;
-  blockHolidays: boolean;
+export interface FinanceMetric {
+  month: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
 }
 
-export interface GoogleSettings {
-  clientId: string;
-  clientSecret: string;
-  syncEnabled: boolean;
-  defaultCategoryId: string;
-}
-
-// Added UserPermissions interface for granular access control
-export interface UserPermissions {
-  canDelete: boolean;
-  viewFinance: boolean;
-  manageUsers: boolean;
-}
-
-// Updated User interface with authentication and relationship fields
-export interface User {
+export interface CustomFieldDefinition {
   id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'client' | 'partner';
-  approved: boolean;
-  avatar?: string;
-  password?: string;
-  linkedEntityId?: string;
-  permissions?: UserPermissions;
+  entity: 'task' | 'client' | 'transaction';
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'date' | 'select';
+  options?: string[];
+}
+
+export interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  category: string;
+  amount: number;
+  type: 'income' | 'expense';
+  status: 'paid' | 'pending';
+  frequency: 'single' | 'recurring';
+  installments?: number;
+  clientId?: string;
+  partnerId?: string;
+  customFields?: Record<string, any>;
 }
 
 export interface ServiceCategory {
@@ -160,6 +148,81 @@ export interface SLATier {
   includedHours: number;
   description: string;
   features?: string[];
+}
+
+export interface WorkConfig {
+  workDays: number[];
+  workHoursStart: string;
+  workHoursEnd: string;
+  maxTasksPerDay: number;
+  maxCriticalPerDay: number;
+  maxHighPerDay: number;
+  slaOffsetCritical: number;
+  slaOffsetHigh: number;
+  slaOffsetMedium: number;
+  slaOffsetLow: number;
+  blockHolidays: boolean;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'client' | 'partner';
+  approved: boolean;
+  avatar?: string;
+  password?: string;
+  linkedEntityId?: string;
+  permissions?: {
+    canDelete: boolean;
+    viewFinance: boolean;
+    manageUsers: boolean;
+  };
+}
+
+export interface CatalogItem {
+  id: string;
+  name: string;
+  type: 'service' | 'product';
+  description: string;
+  defaultPrice: number;
+  defaultHours?: number;
+}
+
+export interface Proposal {
+  id: string;
+  clientId: string;
+  title: string;
+  status: 'draft' | 'sent' | 'accepted' | 'rejected';
+  date: string;
+  validUntil: string;
+  items: any[];
+  totalValue: number;
+  totalHours: number;
+  billingNotes?: string;
+}
+
+export interface Lead {
+  id: string;
+  name: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  value: number;
+  stageId: string;
+  type: 'client' | 'partner';
+  temperature: 'hot' | 'warm' | 'cold';
+  source: string;
+  createdAt: string;
+  lastInteraction: string;
+  notes?: string;
+}
+
+export interface CRMStage {
+  id: string;
+  name: string;
+  color: string;
+  isWin?: boolean;
 }
 
 export interface TaskTemplate {
@@ -179,6 +242,22 @@ export interface TaskTemplateGroup {
   templates: TaskTemplate[];
 }
 
+export interface GoogleSettings {
+  clientId: string;
+  clientSecret: string;
+  syncEnabled: boolean;
+  defaultCategoryId: string;
+}
+
+export interface CompanySettings {
+  name: string;
+  cnpj: string;
+  email: string;
+  phone: string;
+  address: string;
+  website: string;
+}
+
 export interface PlaybookBlock {
   id: string;
   type: 'hero' | 'text' | 'steps' | 'alert' | 'faq';
@@ -195,108 +274,4 @@ export interface Playbook {
     primaryColor: string;
     accentColor: string;
   };
-}
-
-// Added missing CustomFieldDefinition interface
-export interface CustomFieldDefinition {
-  id: string;
-  entity: 'task' | 'client' | 'transaction';
-  key: string;
-  label: string;
-  type: 'text' | 'select' | 'number';
-  options?: string[];
-}
-
-// Added missing FinanceMetric interface
-export interface FinanceMetric {
-  month: string;
-  revenue: number;
-  expenses: number;
-  profit: number;
-}
-
-// Added missing Transaction interface
-export interface Transaction {
-  id: string;
-  date: string;
-  description: string;
-  category: string;
-  amount: number;
-  type: 'income' | 'expense';
-  status: 'paid' | 'pending';
-  frequency: 'single' | 'recurring';
-  installments?: number;
-  clientId?: string;
-  partnerId?: string;
-  customFields?: Record<string, any>;
-}
-
-// Added missing CatalogItem interface
-export interface CatalogItem {
-  id: string;
-  name: string;
-  type: 'service' | 'product';
-  description: string;
-  defaultPrice: number;
-  defaultHours?: number;
-}
-
-// Added missing ProposalItem interface
-export interface ProposalItem {
-  id: string;
-  name: string;
-  type: 'service' | 'product';
-  quantity: number;
-  unitPrice: number;
-  hours?: number;
-  total: number;
-}
-
-// Added missing Proposal interface
-export interface Proposal {
-  id: string;
-  clientId: string;
-  title: string;
-  status: 'draft' | 'sent' | 'accepted' | 'rejected';
-  date: string;
-  validUntil: string;
-  items: ProposalItem[];
-  totalValue: number;
-  totalHours: number;
-  billingNotes?: string;
-}
-
-// Added missing Lead interface
-export interface Lead {
-  id: string;
-  name: string;
-  contactPerson: string;
-  email: string;
-  phone: string;
-  value: number;
-  stageId: string;
-  type: 'client' | 'partner';
-  temperature: 'cold' | 'warm' | 'hot';
-  source: string;
-  createdAt: string;
-  lastInteraction: string;
-  notes: string;
-}
-
-// Added missing CRMStage interface
-export interface CRMStage {
-  id: string;
-  name: string;
-  color: string;
-  isWin?: boolean;
-}
-
-// Added missing CompanySettings interface
-export interface CompanySettings {
-  name: string;
-  cnpj: string;
-  email: string;
-  phone: string;
-  address: string;
-  website: string;
 }
