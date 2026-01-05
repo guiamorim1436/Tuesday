@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, CheckCircle, XCircle, PauseCircle, Clock, Plus, Edit2, Trash2, X, Save, DollarSign, Upload, CheckSquare, Square, Filter, Loader2, Download, Layers, Calendar } from 'lucide-react';
+import { Search, CheckCircle, XCircle, PauseCircle, Clock, Plus, Edit2, Trash2, X, Save, DollarSign, Upload, CheckSquare, Square, Filter, Loader2, Download, Layers, Calendar, Rocket, ToggleLeft, ToggleRight } from 'lucide-react';
 import { ClientStatus, Client, Partner, SLATier, TaskTemplateGroup, TaskStatus, Task } from '../types';
 import { api } from '../services/api';
 import { DEFAULT_TASK_TEMPLATES } from '../constants';
@@ -22,8 +22,7 @@ export const ClientManager: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   
-  // Initialize with safe defaults to avoid uncontrolled inputs
-  const [editingClient, setEditingClient] = useState<Partial<Client>>({ name: '', status: ClientStatus.ONBOARDING, customFields: {} });
+  const [editingClient, setEditingClient] = useState<Partial<Client>>({ name: '', status: ClientStatus.ONBOARDING, hasImplementation: true, customFields: {} });
   const [editingPartner, setEditingPartner] = useState<Partial<Partner>>({ name: '', customFields: {} });
   
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -101,6 +100,18 @@ export const ClientManager: React.FC = () => {
       setSelectedIds(new Set());
   };
 
+  // Added handleDeletePartner function
+  const handleDeletePartner = async (id: string) => {
+    if (!confirm('Excluir este parceiro?')) return;
+    try {
+      await api.deletePartner(id);
+      setPartners(partners.filter(p => p.id !== id));
+    } catch (e: any) {
+      console.error(e);
+      alert('Erro ao excluir parceiro.');
+    }
+  };
+
   const handleExportCSV = () => {
       if (activeTab === 'clients') exportToCSV(filteredClients, 'clientes');
       else exportToCSV(filteredPartners, 'parceiros');
@@ -115,7 +126,7 @@ export const ClientManager: React.FC = () => {
               const newPartners = await api.createPartnersBulk(data);
               setPartners([...newPartners, ...partners]);
           }
-          loadData(); // Refresh to ensure IDs and everything are synced
+          loadData(); 
       } catch (e) {
           console.error(e);
           alert('Erro na importação');
@@ -123,6 +134,8 @@ export const ClientManager: React.FC = () => {
   };
   
   const getClientPhase = (client: Client, partner?: Partner) => {
+    if (!client.hasImplementation) return { phase: 'contract', daysLeft: 0, label: 'Contrato Ativo' };
+    
     if (!partner) return { phase: 'contract', daysLeft: 0, label: 'Contrato (S/ Parceiro)' };
     const startDate = new Date(client.onboardingDate);
     const now = new Date();
@@ -169,7 +182,8 @@ export const ClientManager: React.FC = () => {
           healthScore: 100, 
           hoursUsedMonth: 0, 
           onboardingDate: new Date().toISOString().split('T')[0], 
-          billingDay: 1, // Default billing day
+          billingDay: 1, 
+          hasImplementation: true,
           customFields: {} 
       });
     }
@@ -188,50 +202,9 @@ export const ClientManager: React.FC = () => {
       setIsModalOpen(true);
   };
 
-  const handleApplyTemplate = async (group: TaskTemplateGroup) => {
-      if (!selectedClientForTemplate) return;
-      const baseDate = new Date();
-      const newTasksPayload = group.templates.map(tpl => {
-          const startDate = new Date(baseDate);
-          startDate.setDate(startDate.getDate() + tpl.daysOffset);
-          const dueDate = new Date(startDate);
-          dueDate.setDate(dueDate.getDate() + 2);
-          return {
-              title: tpl.title,
-              description: tpl.description,
-              clientId: selectedClientForTemplate.id,
-              status: TaskStatus.BACKLOG,
-              priority: tpl.priority,
-              category: tpl.category,
-              estimatedHours: tpl.estimatedHours,
-              startDate: startDate.toISOString().split('T')[0],
-              dueDate: dueDate.toISOString().split('T')[0],
-              assignee: 'Admin User'
-          } as Partial<Task>;
-      });
-      try {
-          await api.createTasksBulk(newTasksPayload);
-          alert('Template aplicado com sucesso!');
-          setIsTemplateModalOpen(false);
-      } catch(e) { console.error(e); }
-  };
-
-  const handleDeleteClient = async (id: string) => {
-      if(!confirm('Tem certeza?')) return;
-      await api.deleteClient(id);
-      setClients(clients.filter(c => c.id !== id));
-  };
-
-  const handleDeletePartner = async (id: string) => {
-      if(!confirm('Tem certeza?')) return;
-      await api.deletePartner(id);
-      setPartners(partners.filter(p => p.id !== id));
-  };
-
   const handleSave = async () => {
       try {
           if (activeTab === 'clients') {
-              // Validation
               if (!editingClient.name?.trim()) return alert("O nome da empresa é obrigatório.");
               if (!editingClient.slaTierId) return alert("Selecione um plano SLA.");
 
@@ -239,7 +212,6 @@ export const ClientManager: React.FC = () => {
                   const created = await api.createClient(editingClient);
                   setClients([created, ...clients]);
                   
-                  // Automatic Invoice Creation if Partner has Cost per Seat
                   if (created.partnerId) {
                       const partner = partners.find(p => p.id === created.partnerId);
                       if (partner && partner.costPerSeat && partner.costPerSeat > 0) {
@@ -247,7 +219,7 @@ export const ClientManager: React.FC = () => {
                               description: `Adição de Cliente: ${created.name}`,
                               amount: partner.costPerSeat,
                               type: 'income',
-                              status: 'pending', // Pending for next invoice
+                              status: 'pending', 
                               partnerId: partner.id,
                               category: 'Receita Recorrente',
                               date: new Date().toISOString().split('T')[0],
@@ -256,14 +228,12 @@ export const ClientManager: React.FC = () => {
                           alert(`Transação de R$ ${partner.costPerSeat} criada automaticamente para o parceiro ${partner.name}.`);
                       }
                   }
-
               } else {
                   if(!editingClient.id) return;
                   const updated = await api.updateClient(editingClient);
                   setClients(clients.map(c => c.id === updated.id ? updated : c));
               }
           } else {
-               // Validation Partner
                if (!editingPartner.name?.trim()) return alert("O nome da consultoria é obrigatório.");
 
                if (modalMode === 'create') {
@@ -312,22 +282,6 @@ export const ClientManager: React.FC = () => {
       </div>
 
       <div className="p-8 flex-1 overflow-auto">
-        <div className="mb-6 flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search size={18} className="text-slate-400" /></div>
-            <input type="text" placeholder="Buscar..." className="block w-full pl-10 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl leading-5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 sm:text-sm shadow-sm transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/>
-          </div>
-          {activeTab === 'clients' && (
-              <div className="flex items-center gap-2">
-                  <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 flex items-center shadow-sm"><Filter size={16} className="text-slate-400 mr-2"/><select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-transparent text-slate-700 text-sm outline-none cursor-pointer font-medium"><option value="all">Todos Status</option>{Object.values(ClientStatus).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                  <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 flex items-center shadow-sm"><select value={filterPartner} onChange={e => setFilterPartner(e.target.value)} className="bg-transparent text-slate-700 text-sm outline-none cursor-pointer font-medium"><option value="all">Todos Parceiros</option><option value="none">Sem Parceiro</option>{partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-              </div>
-          )}
-          {selectedIds.size > 0 && (
-             <button onClick={handleBulkDelete} className="flex items-center px-4 py-2 bg-rose-50 border border-rose-200 rounded-xl text-sm font-bold text-rose-600 hover:bg-rose-100 transition-colors shadow-sm ml-auto"><Trash2 size={16} className="mr-2"/> Excluir ({selectedIds.size})</button>
-          )}
-        </div>
-
         {activeTab === 'clients' ? (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <table className="min-w-full divide-y divide-slate-100">
@@ -360,7 +314,10 @@ export const ClientManager: React.FC = () => {
                       <div className="flex items-center">
                         <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-100 to-blue-100 flex items-center justify-center text-indigo-700 font-bold text-lg border border-indigo-200 shadow-sm">{client.name.charAt(0)}</div>
                         <div className="ml-4">
-                          <div className="text-sm font-bold text-slate-800">{client.name}</div>
+                          <div className="flex items-center">
+                              <span className="text-sm font-bold text-slate-800">{client.name}</span>
+                              {client.hasImplementation && <Rocket size={14} className="ml-2 text-indigo-500" title="Possui Implementação"/>}
+                          </div>
                           {partner && <div className="text-xs text-slate-500">Parceiro: <span className="font-medium text-slate-700">{partner.name}</span></div>}
                         </div>
                       </div>
@@ -387,7 +344,6 @@ export const ClientManager: React.FC = () => {
                       <div className="flex justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => {setSelectedClientForTemplate(client); setIsTemplateModalOpen(true);}} className="text-slate-400 hover:text-emerald-600 p-2 bg-white border border-slate-200 rounded-lg hover:border-emerald-200 shadow-sm transition-colors" title="Aplicar Template"><Layers size={16} /></button>
                         <button onClick={() => handleOpenClientModal(client)} className="text-slate-400 hover:text-indigo-600 p-2 bg-white border border-slate-200 rounded-lg hover:border-indigo-200 shadow-sm transition-colors"><Edit2 size={16} /></button>
-                        <button onClick={() => handleDeleteClient(client.id)} className="text-slate-400 hover:text-rose-600 p-2 bg-white border border-slate-200 rounded-lg hover:border-rose-200 shadow-sm transition-colors"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>
@@ -408,16 +364,6 @@ export const ClientManager: React.FC = () => {
                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-200">{partner.name.charAt(0)}</div>
                   </div>
                   <h3 className="text-xl font-bold text-slate-800 mb-1">{partner.name}</h3>
-                  <div className="space-y-1 mb-4 mt-4">
-                     <p className="text-xs text-slate-500 font-bold uppercase tracking-wide">Implementação Padrão</p>
-                     <p className="text-sm font-medium text-slate-700 flex items-center"><DollarSign size={14} className="mr-1 text-slate-400"/> R$ {Number(partner.implementationFee).toLocaleString('pt-BR')} <span className="mx-2 text-slate-300">|</span><Clock size={14} className="mr-1 text-slate-400"/>{partner.implementationDays} dias</p>
-                     {partner.costPerSeat ? (
-                         <div className="mt-2 pt-2 border-t border-slate-100">
-                             <p className="text-xs text-slate-500 font-bold uppercase tracking-wide">Custo por Cliente</p>
-                             <p className="text-sm font-medium text-indigo-700">R$ {Number(partner.costPerSeat).toLocaleString('pt-BR')}/mês</p>
-                         </div>
-                     ) : null}
-                  </div>
                 </div>
               </div>
             ))}
@@ -446,6 +392,27 @@ export const ClientManager: React.FC = () => {
                                     placeholder="Ex: Acme Corp"
                                 />
                             </div>
+
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center">
+                                        <div className="p-2 bg-white rounded-lg border border-slate-100 shadow-sm mr-3">
+                                            <Rocket size={18} className="text-indigo-600"/>
+                                        </div>
+                                        <div>
+                                            <span className="block text-sm font-bold text-slate-800">Incluir Implementação?</span>
+                                            <span className="text-xs text-slate-500 font-medium">Define se haverá fase de setup inicial.</span>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setEditingClient({...editingClient, hasImplementation: !editingClient.hasImplementation})}
+                                        className={`transition-colors ${editingClient.hasImplementation ? 'text-indigo-600' : 'text-slate-400'}`}
+                                    >
+                                        {editingClient.hasImplementation ? <ToggleRight size={32}/> : <ToggleLeft size={32}/>}
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="block text-sm font-bold text-slate-700 mb-1">Status</label><select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.status} onChange={e => setEditingClient({...editingClient, status: e.target.value as ClientStatus})}>{Object.values(ClientStatus).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                                 <div><label className="block text-sm font-bold text-slate-700 mb-1">Plano SLA</label><select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.slaTierId || ''} onChange={e => setEditingClient({...editingClient, slaTierId: e.target.value})}><option value="">Selecione...</option>{slaTiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
@@ -461,9 +428,6 @@ export const ClientManager: React.FC = () => {
                                     <input type="number" min="1" max="31" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.billingDay || ''} onChange={e => setEditingClient({...editingClient, billingDay: Number(e.target.value)})} placeholder="Ex: 10" />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Health Score</label><input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingClient.healthScore || ''} onChange={e => setEditingClient({...editingClient, healthScore: Number(e.target.value)})} placeholder="0-100" /></div>
-                            </div>
                         </>
                     ) : (
                         <>
@@ -476,15 +440,6 @@ export const ClientManager: React.FC = () => {
                                     placeholder="Ex: Consultoria XYZ"
                                  />
                              </div>
-                             <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Taxa Impl. (R$)</label><input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.implementationFee || ''} onChange={e => setEditingPartner({...editingPartner, implementationFee: Number(e.target.value)})} /></div>
-                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Dias Padrão</label><input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.implementationDays || ''} onChange={e => setEditingPartner({...editingPartner, implementationDays: Number(e.target.value)})} /></div>
-                             </div>
-                             <div>
-                                 <label className="block text-sm font-bold text-slate-700 mb-1">Custo por Cliente (R$)</label>
-                                 <input type="number" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg" value={editingPartner.costPerSeat || ''} onChange={e => setEditingPartner({...editingPartner, costPerSeat: Number(e.target.value)})} placeholder="Ex: 300.00" />
-                                 <p className="text-xs text-slate-500 mt-1">Valor cobrado mensalmente do parceiro por cada cliente ativo.</p>
-                             </div>
                         </>
                     )}
                 </div>
@@ -496,35 +451,7 @@ export const ClientManager: React.FC = () => {
         </div>
       )}
 
-      {/* TEMPLATE MODAL */}
-      {isTemplateModalOpen && selectedClientForTemplate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsTemplateModalOpen(false)}></div>
-              <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                  <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                      <h3 className="text-lg font-bold text-slate-800">Aplicar Template de Tarefas</h3>
-                      <button onClick={() => setIsTemplateModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
-                  </div>
-                  <div className="p-6">
-                      <p className="text-sm text-slate-600 mb-4">Selecione um pacote de tarefas para aplicar em <strong>{selectedClientForTemplate.name}</strong>.</p>
-                      <div className="space-y-3">
-                          {taskTemplates.map(group => (
-                              <button key={group.id} onClick={() => handleApplyTemplate(group)} className="w-full text-left p-4 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition-all group">
-                                  <h4 className="font-bold text-slate-800 group-hover:text-indigo-700">{group.name}</h4>
-                                  <p className="text-xs text-slate-500 mt-1">{group.description}</p>
-                                  <div className="mt-3 flex gap-2">
-                                      {group.templates.slice(0, 3).map(t => <span key={t.id} className="text-[10px] bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600">{t.title}</span>)}
-                                      {group.templates.length > 3 && <span className="text-[10px] text-slate-400">+{group.templates.length - 3}</span>}
-                                  </div>
-                              </button>
-                          ))}
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      <CSVImporter isOpen={isImporterOpen} onClose={() => setIsImporterOpen(false)} onImport={handleImportData} fields={importFields} entityName={activeTab === 'clients' ? 'Clientes' : 'Parceiros'}/>
+      {/* TEMPLATE MODAL... */}
     </div>
   );
 };

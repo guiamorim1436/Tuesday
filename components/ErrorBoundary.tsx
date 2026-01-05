@@ -1,4 +1,5 @@
-import React, { ErrorInfo, ReactNode } from "react";
+
+import React, { Component, ErrorInfo, ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 interface ErrorBoundaryProps {
@@ -10,12 +11,17 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly declare state property for TypeScript
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    error: null,
-  };
+// Ensure ErrorBoundary correctly extends React.Component with props and state types
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+    };
+  }
 
   public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
@@ -26,6 +32,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   public render() {
+    // Accessing state property through this context
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center h-screen bg-slate-50 text-slate-800 p-6 text-center">
@@ -54,6 +61,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       );
     }
 
+    // Accessing props property through this context
     return this.props.children;
   }
 }

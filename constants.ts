@@ -107,15 +107,17 @@ export const MOCK_PARTNERS: Partner[] = [
 ];
 
 // Mock Clients
+// Added hasImplementation: true to match the Client interface
 export const MOCK_CLIENTS: Client[] = [
-  { id: 'c1', name: 'Logística Veloz', status: ClientStatus.ACTIVE, slaTierId: 'sla_1', partnerId: 'p1', onboardingDate: '2023-09-15', healthScore: 92, hoursUsedMonth: 0, customFields: { contract_url: 'http://doc.com/123' } },
-  { id: 'c2', name: 'Fintech Nova', status: ClientStatus.ACTIVE, slaTierId: 'sla_3', partnerId: 'p2', onboardingDate: '2023-03-10', healthScore: 88, hoursUsedMonth: 0, customFields: {} },
-  { id: 'c3', name: 'Varejo Bras', status: ClientStatus.PAUSED, slaTierId: 'sla_1', onboardingDate: '2023-06-20', healthScore: 45, hoursUsedMonth: 0, customFields: {} },
-  { id: 'c4', name: 'EduTech Global', status: ClientStatus.ACTIVE, slaTierId: 'sla_2', partnerId: 'p3', onboardingDate: '2023-11-05', healthScore: 98, hoursUsedMonth: 0, customFields: {} }, // Recent onboarding
-  { id: 'c5', name: 'Indústria Metal', status: ClientStatus.ONBOARDING, slaTierId: 'sla_3', partnerId: 'p1', onboardingDate: new Date().toISOString().split('T')[0], healthScore: 100, hoursUsedMonth: 0, customFields: {} },
+  { id: 'c1', name: 'Logística Veloz', status: ClientStatus.ACTIVE, slaTierId: 'sla_1', partnerId: 'p1', onboardingDate: '2023-09-15', healthScore: 92, hoursUsedMonth: 0, hasImplementation: true, customFields: { contract_url: 'http://doc.com/123' } },
+  { id: 'c2', name: 'Fintech Nova', status: ClientStatus.ACTIVE, slaTierId: 'sla_3', partnerId: 'p2', onboardingDate: '2023-03-10', healthScore: 88, hoursUsedMonth: 0, hasImplementation: true, customFields: {} },
+  { id: 'c3', name: 'Varejo Bras', status: ClientStatus.PAUSED, slaTierId: 'sla_1', onboardingDate: '2023-06-20', healthScore: 45, hoursUsedMonth: 0, hasImplementation: true, customFields: {} },
+  { id: 'c4', name: 'EduTech Global', status: ClientStatus.ACTIVE, slaTierId: 'sla_2', partnerId: 'p3', onboardingDate: '2023-11-05', healthScore: 98, hoursUsedMonth: 0, hasImplementation: true, customFields: {} }, // Recent onboarding
+  { id: 'c5', name: 'Indústria Metal', status: ClientStatus.ONBOARDING, slaTierId: 'sla_3', partnerId: 'p1', onboardingDate: new Date().toISOString().split('T')[0], healthScore: 100, hoursUsedMonth: 0, hasImplementation: true, customFields: {} },
 ];
 
 // Mock Tasks
+// Added attachments: [] and autoSla: true to match the Task interface
 export const MOCK_TASKS: Task[] = [
   { 
     id: 't1', 
@@ -140,6 +142,8 @@ export const MOCK_TASKS: Task[] = [
     comments: [
       { id: 'cm1', author: 'Ana', text: 'Já validei o copy dos emails.', timestamp: '2023-11-02 10:00', avatar: 'A', type: 'text' }
     ],
+    attachments: [],
+    autoSla: true,
     customFields: { ticket_url: 'https://jira.com/123', approval_required: 'Sim' }
   },
   { 
@@ -160,6 +164,8 @@ export const MOCK_TASKS: Task[] = [
     category: 'Automacao',
     subtasks: [],
     comments: [],
+    attachments: [],
+    autoSla: true,
     customFields: {}
   },
   { 
@@ -180,6 +186,8 @@ export const MOCK_TASKS: Task[] = [
     category: 'CRM',
     subtasks: [],
     comments: [],
+    attachments: [],
+    autoSla: true,
     customFields: {}
   },
   { 
@@ -200,6 +208,8 @@ export const MOCK_TASKS: Task[] = [
     category: 'Reunião',
     subtasks: [],
     comments: [],
+    attachments: [],
+    autoSla: true,
     customFields: {}
   },
   { 
@@ -220,6 +230,8 @@ export const MOCK_TASKS: Task[] = [
     category: 'Suporte', // Non-billable
     subtasks: [],
     comments: [],
+    attachments: [],
+    autoSla: true,
     customFields: {}
   }
 ];

@@ -26,7 +26,7 @@ export const ServicePlans: React.FC = () => {
   };
 
   const handleAddSLA = async () => {
-    if (!newSLA.name) return;
+    if (!newSLA.name) return alert("O nome do plano é obrigatório.");
     try {
         const created = await api.createSLATier({
             name: newSLA.name,
@@ -40,7 +40,7 @@ export const ServicePlans: React.FC = () => {
         setFeatureInput('');
     } catch(e: any) { 
         console.error(e);
-        alert('Erro ao salvar plano. Verifique se você executou o SQL atualizado em Configurações > Banco de Dados.');
+        alert('Erro ao salvar plano. Se você usa Supabase, vá em "Configurações > Banco de Dados" e rode o Script SQL para criar a tabela "sla_tiers".');
     }
   };
 
@@ -89,11 +89,11 @@ export const ServicePlans: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Preço (R$)</label>
-                            <input type="number" className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="0.00" value={newSLA.price || ''} onChange={e => setNewSLA({...newSLA, price: Number(e.target.value)})} />
+                            <input type="number" className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="0.00" value={newSLA.price ?? ''} onChange={e => setNewSLA({...newSLA, price: Number(e.target.value)})} />
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Horas/Mês</label>
-                            <input type="number" className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="0" value={newSLA.includedHours || ''} onChange={e => setNewSLA({...newSLA, includedHours: Number(e.target.value)})} />
+                            <input type="number" className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="0" value={newSLA.includedHours ?? ''} onChange={e => setNewSLA({...newSLA, includedHours: Number(e.target.value)})} />
                         </div>
                     </div>
                     <div>

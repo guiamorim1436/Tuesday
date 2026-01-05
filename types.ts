@@ -1,7 +1,6 @@
 
 // Domain Entities
 
-// We keep the Enum for default logic, but the app handles strings now
 export enum TaskStatus {
   REQUESTED = 'Solicitado', 
   BACKLOG = 'Backlog',
@@ -31,7 +30,7 @@ export interface Partner {
   totalCommissionPaid: number;
   implementationFee: number;
   implementationDays: number;
-  costPerSeat?: number; // New: Monthly cost partner pays per active client
+  costPerSeat?: number; 
   billingDay?: number;
   customFields?: Record<string, any>;
 }
@@ -46,6 +45,7 @@ export interface Client {
   healthScore: number;
   hoursUsedMonth: number;
   billingDay?: number;
+  hasImplementation: boolean; // New: Flag for implementation
   customFields?: Record<string, any>;
 }
 
@@ -61,6 +61,15 @@ export interface Comment {
   duration?: string;
 }
 
+export interface Attachment {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  size: string;
+  createdAt: string;
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -72,7 +81,7 @@ export interface Task {
   title: string;
   description: string;
   clientId: string;
-  status: string; // Changed from Enum to string to support custom statuses
+  status: string;
   priority: TaskPriority;
   
   startDate: string;
@@ -90,6 +99,8 @@ export interface Task {
   
   subtasks: Subtask[];
   comments: Comment[];
+  attachments: Attachment[]; // New: List of files
+  autoSla: boolean; // New: Toggle for automatic scheduling
   customFields: Record<string, any>;
   isTrackingTime?: boolean;
   lastTimeLogStart?: number; 
@@ -128,7 +139,7 @@ export interface CustomFieldDefinition {
   entity: EntityType;
   key: string;
   label: string;
-  type: 'text' | 'number' | 'currency' | 'date' | 'select' | 'time' | 'url' | 'attachment'; // Expanded Types
+  type: 'text' | 'number' | 'currency' | 'date' | 'select' | 'time' | 'url' | 'attachment';
   options?: string[]; 
 }
 
@@ -144,30 +155,23 @@ export interface SLATier {
   price: number;
   includedHours: number;
   description?: string;
-  features?: string[]; // New: List of included features
+  features?: string[]; 
 }
 
 export interface WorkConfig {
-  workDays: number[]; // 0=Sun, 1=Mon, etc.
-  workHoursStart: string; // "09:00"
-  workHoursEnd: string; // "18:00"
-  
-  // Capacity Limits
+  workDays: number[]; 
+  workHoursStart: string; 
+  workHoursEnd: string; 
   maxTasksPerDay: number;
   maxCriticalPerDay: number;
   maxHighPerDay: number;
-
-  // SLA Automation Rules (Days to start)
-  slaOffsetCritical: number; // usually 0
-  slaOffsetHigh: number; // usually 1
-  slaOffsetMedium: number; // usually 3
-  slaOffsetLow: number; // usually 5
-  
-  blockHolidays?: boolean; // New: Block holidays logic
+  slaOffsetCritical: number; 
+  slaOffsetHigh: number; 
+  slaOffsetMedium: number; 
+  slaOffsetLow: number; 
+  blockHolidays?: boolean; 
   taskStatuses?: string[]; 
 }
-
-// --- SETTINGS & AUTH ---
 
 export type UserRole = 'admin' | 'partner' | 'client' | 'pending';
 
@@ -199,8 +203,6 @@ export interface CompanySettings {
   website: string;
 }
 
-// --- TASK TEMPLATES ---
-
 export interface TaskTemplate {
   id: string;
   title: string;
@@ -217,8 +219,6 @@ export interface TaskTemplateGroup {
   description: string;
   templates: TaskTemplate[];
 }
-
-// --- PROPOSALS & CATALOG ---
 
 export type ProposalStatus = 'draft' | 'sent' | 'approved' | 'rejected';
 
@@ -256,8 +256,6 @@ export interface Proposal {
   leadId?: string;
 }
 
-// --- CRM ---
-
 export type LeadTemperature = 'hot' | 'warm' | 'cold';
 export type LeadType = 'client' | 'partner';
 
@@ -284,14 +282,12 @@ export interface Lead {
   notes: string;
 }
 
-// --- PLAYBOOKS (NEW) ---
-
 export type PlaybookBlockType = 'hero' | 'text' | 'flow' | 'faq' | 'cards' | 'steps' | 'alert';
 
 export interface PlaybookBlock {
   id: string;
   type: PlaybookBlockType;
-  content: any; // Dynamic content based on type
+  content: any; 
   styles?: Record<string, any>;
 }
 

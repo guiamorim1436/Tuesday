@@ -1,6 +1,6 @@
 
 import { supabase, isConfigured } from '../lib/supabaseClient';
-import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup, User, UserRole, Comment, Subtask, Playbook, PlaybookBlock } from '../types';
+import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup, User, Playbook, PlaybookBlock, Comment, Subtask } from '../types';
 import { 
     DEFAULT_WORK_CONFIG, 
     MOCK_CLIENTS, 
@@ -57,34 +57,21 @@ const LocalDB = {
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-const shouldUseLocalDB = (error: any) => {
-    if (!isConfigured) return true;
-    if (error) {
-        console.warn("API Error detected, falling back to LocalDB. Reason:", error.message || error);
-        return true;
-    }
-    return false;
-};
-
-// Current Session Helper
-const getCurrentUser = (): User | null => {
-    try {
-        const u = localStorage.getItem('tuesday_current_user');
-        return u ? JSON.parse(u) : null;
-    } catch { return null; }
-};
-
-// Converters ensuring DB compatibility
 const toUUID = (val?: string | null) => (!val || val.trim() === '') ? null : val;
 const toDate = (val?: string | null) => (!val || val.trim() === '') ? null : val;
-const toNumeric = (val?: number | string | null) => (val === null || val === undefined || val === '') ? 0 : Number(val);
+const toNumeric = (val?: number | string | null) => {
+    if (val === null || val === undefined || val === '') return 0;
+    const num = Number(val);
+    return isNaN(num) ? 0 : num;
+};
 
 export const api = {
     // --- AUTH & USERS ---
     login: async (email: string, pass: string): Promise<User | null> => {
         if (isConfigured) {
              const { data, error } = await supabase.from('app_users').select('*').eq('email', email).single();
-             if (!error && data) {
+             if (error) throw error;
+             if (data) {
                  if(data.password && data.password !== pass) return null; 
                  if(!data.approved) throw new Error("Conta aguardando aprovação.");
                  
@@ -102,7 +89,6 @@ export const api = {
                  return user;
              }
         }
-        // Local Fallback
         const users = LocalDB.get<User>(DB_KEYS.USERS, MOCK_USERS);
         const user = users.find(u => u.email === email);
         if (user && user.password === pass) {
@@ -126,7 +112,8 @@ export const api = {
                 role: userData.role,
                 approved: false
             }]).select().single();
-            if (!error) return data;
+            if (error) throw error;
+            return data;
         }
         const users = LocalDB.get<User>(DB_KEYS.USERS, MOCK_USERS);
         const newUser = { ...userData, id: generateId(), approved: false } as User;
@@ -137,7 +124,8 @@ export const api = {
     getUsers: async (): Promise<User[]> => {
         if (isConfigured) {
             const { data, error } = await supabase.from('app_users').select('*');
-            if (!error) return data.map(u => ({
+            if (error) throw error;
+            return data.map(u => ({
                 id: u.id,
                 name: u.name,
                 email: u.email,
@@ -162,7 +150,8 @@ export const api = {
                 linked_entity_id: toUUID(userData.linkedEntityId),
                 permissions: userData.permissions || {}
             }]).select().single();
-            if (!error) return data;
+            if (error) throw error;
+            return data;
         }
         const users = LocalDB.get<User>(DB_KEYS.USERS, MOCK_USERS);
         const newUser = { ...userData, id: generateId() } as User;
@@ -180,7 +169,8 @@ export const api = {
                 linked_entity_id: toUUID(user.linkedEntityId),
                 permissions: user.permissions
             }).eq('id', user.id).select().single();
-            if (!error) return data;
+            if (error) throw error;
+            return data;
         }
         const users = LocalDB.get<User>(DB_KEYS.USERS, MOCK_USERS);
         const updated = users.map(u => u.id === user.id ? user : u);
@@ -200,7 +190,8 @@ export const api = {
     getClients: async (): Promise<Client[]> => {
         if (isConfigured) {
             const { data, error } = await supabase.from('clients').select('*');
-            if (!error) return data.map(c => ({
+            if (error) throw error;
+            return data.map(c => ({
                 id: c.id,
                 name: c.name,
                 status: c.status,
@@ -210,10 +201,11 @@ export const api = {
                 healthScore: c.health_score,
                 hoursUsedMonth: c.hours_used_month,
                 billingDay: c.billing_day,
+                hasImplementation: c.has_implementation ?? true,
                 customFields: c.custom_fields
             }));
         }
-        return LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
+        return LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS).map(c => ({ ...c, hasImplementation: c.hasImplementation ?? true }));
     },
 
     createClient: async (client: Partial<Client>): Promise<Client> => {
@@ -227,13 +219,11 @@ export const api = {
                 health_score: toNumeric(client.healthScore),
                 hours_used_month: 0,
                 billing_day: toNumeric(client.billingDay),
+                has_implementation: client.hasImplementation,
                 custom_fields: client.customFields || {}
             };
             const { data, error } = await supabase.from('clients').insert([payload]).select().single();
-            if(error) {
-                console.error("Supabase Error (Create Client):", error);
-                throw error;
-            }
+            if (error) throw error;
             return {
                 id: data.id,
                 name: data.name,
@@ -244,6 +234,7 @@ export const api = {
                 healthScore: data.health_score,
                 hoursUsedMonth: data.hours_used_month,
                 billingDay: data.billing_day,
+                hasImplementation: data.has_implementation,
                 customFields: data.custom_fields
             };
         }
@@ -263,10 +254,12 @@ export const api = {
                 onboarding_date: toDate(client.onboardingDate),
                 health_score: toNumeric(client.healthScore),
                 billing_day: toNumeric(client.billingDay),
+                has_implementation: client.hasImplementation,
                 custom_fields: client.customFields || {}
             };
             const { data, error } = await supabase.from('clients').update(payload).eq('id', client.id).select().single();
-            if (!error) return {
+            if (error) throw error;
+            return {
                 id: data.id,
                 name: data.name,
                 status: data.status,
@@ -276,6 +269,7 @@ export const api = {
                 healthScore: data.health_score,
                 hoursUsedMonth: data.hours_used_month,
                 billingDay: data.billing_day,
+                hasImplementation: data.has_implementation,
                 customFields: data.custom_fields
             };
         }
@@ -286,21 +280,44 @@ export const api = {
     },
 
     deleteClient: async (id: string) => {
-        if (isConfigured) await supabase.from('clients').delete().eq('id', id);
+        if (isConfigured) {
+             const { error } = await supabase.from('clients').delete().eq('id', id);
+             if (error) throw error;
+             return;
+        }
         const clients = LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
         LocalDB.set(DB_KEYS.CLIENTS, clients.filter(c => c.id !== id));
     },
 
     deleteClientsBulk: async (ids: string[]) => {
-        if (isConfigured) await supabase.from('clients').delete().in('id', ids);
+        if (isConfigured) {
+             const { error } = await supabase.from('clients').delete().in('id', ids);
+             if (error) throw error;
+             return;
+        }
         const clients = LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
         LocalDB.set(DB_KEYS.CLIENTS, clients.filter(c => !ids.includes(c.id)));
     },
 
     createClientsBulk: async (clientsData: any[]): Promise<Client[]> => {
-        // Warning: This only does LocalDB for demo bulk.
+        if (isConfigured) {
+             const payload = clientsData.map(c => ({
+                name: c.name,
+                status: c.status || 'Onboarding',
+                onboarding_date: c.onboardingDate ? toDate(c.onboardingDate) : new Date(),
+                health_score: 100,
+                sla_tier_id: toUUID(c.slaTierId),
+                has_implementation: true,
+                custom_fields: {}
+             }));
+             const { data, error } = await supabase.from('clients').insert(payload).select();
+             if (error) throw error;
+             return data.map((d: any) => ({
+                 id: d.id, name: d.name, status: d.status, slaTierId: d.sla_tier_id, partnerId: d.partner_id, onboardingDate: d.onboarding_date, healthScore: d.health_score, hoursUsedMonth: d.hours_used_month, billingDay: d.billing_day, hasImplementation: d.has_implementation, customFields: d.custom_fields
+             }));
+        }
         const clients = LocalDB.get<Client>(DB_KEYS.CLIENTS, MOCK_CLIENTS);
-        const newClients = clientsData.map(c => ({ ...c, id: generateId(), status: c.status || ClientStatus.ONBOARDING } as Client));
+        const newClients = clientsData.map(c => ({ ...c, id: generateId(), status: c.status || ClientStatus.ONBOARDING, hasImplementation: true } as Client));
         LocalDB.set(DB_KEYS.CLIENTS, [...newClients, ...clients]);
         return newClients;
     },
@@ -309,7 +326,8 @@ export const api = {
     getPartners: async (): Promise<Partner[]> => {
         if (isConfigured) {
             const { data, error } = await supabase.from('partners').select('*');
-            if (!error) return data.map(p => ({
+            if (error) throw error;
+            return data.map(p => ({
                 id: p.id,
                 name: p.name,
                 totalReferrals: p.total_referrals,
@@ -337,10 +355,7 @@ export const api = {
                 custom_fields: partner.customFields || {}
             };
             const { data, error } = await supabase.from('partners').insert([payload]).select().single();
-            if(error) {
-                console.error("Supabase Error (Create Partner):", error);
-                throw error;
-            }
+            if (error) throw error;
             return {
                 id: data.id,
                 name: data.name,
@@ -370,7 +385,8 @@ export const api = {
                 custom_fields: partner.customFields || {}
             };
             const { data, error } = await supabase.from('partners').update(payload).eq('id', partner.id).select().single();
-            if (!error) return {
+            if (error) throw error;
+            return {
                 id: data.id,
                 name: data.name,
                 totalReferrals: data.total_referrals,
@@ -389,18 +405,38 @@ export const api = {
     },
 
     deletePartner: async (id: string) => {
-        if (isConfigured) await supabase.from('partners').delete().eq('id', id);
+        if (isConfigured) {
+             const { error } = await supabase.from('partners').delete().eq('id', id);
+             if (error) throw error;
+             return;
+        }
         const partners = LocalDB.get<Partner>(DB_KEYS.PARTNERS, MOCK_PARTNERS);
         LocalDB.set(DB_KEYS.PARTNERS, partners.filter(p => p.id !== id));
     },
 
     deletePartnersBulk: async (ids: string[]) => {
-        if (isConfigured) await supabase.from('partners').delete().in('id', ids);
+        if (isConfigured) {
+             const { error } = await supabase.from('partners').delete().in('id', ids);
+             if (error) throw error;
+             return;
+        }
         const partners = LocalDB.get<Partner>(DB_KEYS.PARTNERS, MOCK_PARTNERS);
         LocalDB.set(DB_KEYS.PARTNERS, partners.filter(p => !ids.includes(p.id)));
     },
 
     createPartnersBulk: async (data: any[]): Promise<Partner[]> => {
+        if (isConfigured) {
+             const payload = data.map(p => ({
+                name: p.name,
+                implementation_fee: toNumeric(p.implementationFee),
+                implementation_days: toNumeric(p.implementationDays)
+             }));
+             const { data: inserted, error } = await supabase.from('partners').insert(payload).select();
+             if (error) throw error;
+             return inserted.map((d: any) => ({
+                 id: d.id, name: d.name, implementationFee: d.implementation_fee, implementationDays: d.implementation_days, totalReferrals: 0, totalCommissionPaid: 0, costPerSeat: 0
+             }));
+        }
         const partners = LocalDB.get<Partner>(DB_KEYS.PARTNERS, MOCK_PARTNERS);
         const newPartners = data.map(p => ({ ...p, id: generateId() } as Partner));
         LocalDB.set(DB_KEYS.PARTNERS, [...newPartners, ...partners]);
@@ -409,55 +445,51 @@ export const api = {
 
     // --- TASKS ---
     getTasks: async (): Promise<Task[]> => {
-        // Note: For full functionality, we would need to join comments/subtasks. 
-        // Here we mock simpler structure for hybrid approach.
-        let tasks = LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
-        
         if (isConfigured) {
              const { data, error } = await supabase.from('tasks').select('*');
-             if (!error && data) {
-                 tasks = data.map(t => ({
-                     id: t.id,
-                     title: t.title,
-                     description: t.description,
-                     clientId: t.client_id,
-                     status: t.status,
-                     priority: t.priority,
-                     category: t.category,
-                     startDate: t.start_date,
-                     dueDate: t.due_date,
-                     createdAt: t.created_at,
-                     estimatedHours: t.estimated_hours,
-                     actualHours: t.actual_hours,
-                     isTrackingTime: t.is_tracking_time,
-                     lastTimeLogStart: t.last_time_log_start ? Number(t.last_time_log_start) : undefined,
-                     assignee: t.assignee,
-                     participants: t.participants || [],
-                     watchers: t.watchers || [],
-                     customFields: t.custom_fields,
-                     subtasks: [], // Would fetch separately
-                     comments: [] // Would fetch separately
-                 }));
-             }
+             if (error) throw error;
+             return data.map(t => ({
+                 id: t.id,
+                 title: t.title,
+                 description: t.description,
+                 clientId: t.client_id,
+                 status: t.status,
+                 priority: t.priority,
+                 category: t.category,
+                 startDate: t.start_date,
+                 dueDate: t.due_date,
+                 createdAt: t.created_at,
+                 estimatedHours: t.estimated_hours,
+                 actualHours: t.actual_hours,
+                 autoSla: t.auto_sla ?? true,
+                 is_tracking_time: t.is_tracking_time,
+                 lastTimeLogStart: t.last_time_log_start ? Number(t.last_time_log_start) : undefined,
+                 assignee: t.assignee,
+                 participants: t.participants || [],
+                 watchers: t.watchers || [],
+                 customFields: t.custom_fields,
+                 attachments: t.attachments || [],
+                 subtasks: [], 
+                 comments: [] 
+             }));
         }
-        return tasks;
+        return LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS).map(t => ({ ...t, autoSla: t.autoSla ?? true }));
     },
 
     createTask: async (task: Partial<Task>): Promise<Task> => {
-        // Auto-calculate startDate based on SLA logic if not provided
-        if (!task.startDate) {
+        // Only auto-schedule if autoSla is TRUE
+        if (task.autoSla && !task.startDate) {
             const config = LocalDB.getObject<WorkConfig>(DB_KEYS.SETTINGS_WORK, DEFAULT_WORK_CONFIG);
             const today = new Date();
             let offset = config.slaOffsetMedium;
             if (task.priority === TaskPriority.CRITICAL) offset = config.slaOffsetCritical;
             else if (task.priority === TaskPriority.HIGH) offset = config.slaOffsetHigh;
             else if (task.priority === TaskPriority.LOW) offset = config.slaOffsetLow;
-            
             today.setDate(today.getDate() + offset);
             task.startDate = today.toISOString().split('T')[0];
             if (!task.dueDate) {
                 const due = new Date(today);
-                due.setDate(due.getDate() + 2); // Default 2 days duration
+                due.setDate(due.getDate() + 2);
                 task.dueDate = due.toISOString().split('T')[0];
             }
         }
@@ -474,13 +506,12 @@ export const api = {
                  due_date: toDate(task.dueDate),
                  estimated_hours: toNumeric(task.estimatedHours),
                  assignee: task.assignee,
+                 auto_sla: task.autoSla,
+                 attachments: task.attachments || [],
                  custom_fields: task.customFields || {}
              };
              const { data, error } = await supabase.from('tasks').insert([payload]).select().single();
-             if (error) {
-                 console.error("Supabase Error (Create Task):", error);
-                 throw error;
-             }
+             if (error) throw error;
              return { 
                  ...data, 
                  clientId: data.client_id, 
@@ -488,22 +519,15 @@ export const api = {
                  dueDate: data.due_date, 
                  estimatedHours: data.estimated_hours, 
                  actualHours: data.actual_hours, 
+                 autoSla: data.auto_sla,
+                 attachments: data.attachments || [],
                  subtasks: [], 
                  comments: [] 
              };
         }
 
         const tasks = LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
-        const newTask = { 
-            ...task, 
-            id: generateId(), 
-            createdAt: new Date().toISOString(),
-            subtasks: [], 
-            comments: [],
-            actualHours: 0,
-            participants: [],
-            watchers: []
-        } as Task;
+        const newTask = { ...task, id: generateId(), createdAt: new Date().toISOString(), subtasks: [], comments: [], attachments: [], actualHours: 0, participants: [], watchers: [] } as Task;
         LocalDB.set(DB_KEYS.TASKS, [newTask, ...tasks]);
         return newTask;
     },
@@ -523,9 +547,12 @@ export const api = {
                  is_tracking_time: task.isTrackingTime,
                  last_time_log_start: task.lastTimeLogStart,
                  assignee: task.assignee,
+                 auto_sla: task.autoSla,
+                 attachments: task.attachments || [],
                  custom_fields: task.customFields || {}
              };
-             await supabase.from('tasks').update(payload).eq('id', task.id);
+             const { error } = await supabase.from('tasks').update(payload).eq('id', task.id);
+             if (error) throw error;
              return task;
         }
         const tasks = LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
@@ -535,14 +562,30 @@ export const api = {
     },
 
     deleteTask: async (id: string) => {
-        if (isConfigured) await supabase.from('tasks').delete().eq('id', id);
+        if (isConfigured) {
+            const { error } = await supabase.from('tasks').delete().eq('id', id);
+            if (error) throw error;
+            return;
+        }
         const tasks = LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
         LocalDB.set(DB_KEYS.TASKS, tasks.filter(t => t.id !== id));
     },
 
     createTasksBulk: async (tasksData: Partial<Task>[]) => {
+        if (isConfigured) {
+             const payload = tasksData.map(t => ({
+                 title: t.title,
+                 client_id: toUUID(t.clientId),
+                 status: t.status,
+                 priority: t.priority,
+                 auto_sla: t.autoSla ?? true
+             }));
+             const { error } = await supabase.from('tasks').insert(payload);
+             if (error) throw error;
+             return;
+        }
         const tasks = LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
-        const newTasks = tasksData.map(t => ({ ...t, id: generateId(), createdAt: new Date().toISOString(), subtasks: [], comments: [] } as Task));
+        const newTasks = tasksData.map(t => ({ ...t, id: generateId(), createdAt: new Date().toISOString(), subtasks: [], comments: [], attachments: [] } as Task));
         LocalDB.set(DB_KEYS.TASKS, [...newTasks, ...tasks]);
     },
 
@@ -550,7 +593,8 @@ export const api = {
     getTransactions: async (): Promise<Transaction[]> => {
         if (isConfigured) {
             const { data, error } = await supabase.from('transactions').select('*');
-            if (!error) return data.map(t => ({
+            if (error) throw error;
+            return data.map(t => ({
                 id: t.id,
                 date: t.date,
                 description: t.description,
@@ -584,10 +628,7 @@ export const api = {
                  custom_fields: tr.customFields || {}
              };
              const { data, error } = await supabase.from('transactions').insert([payload]).select().single();
-             if(error) {
-                 console.error("Supabase Error (Create Transaction):", error);
-                 throw error;
-             }
+             if (error) throw error;
              return {
                  id: data.id,
                  date: data.date,
@@ -610,13 +651,21 @@ export const api = {
     },
 
     deleteTransaction: async (id: string) => {
-        if (isConfigured) await supabase.from('transactions').delete().eq('id', id);
+        if (isConfigured) {
+            const { error } = await supabase.from('transactions').delete().eq('id', id);
+            if (error) throw error;
+            return;
+        }
         const transactions = LocalDB.get<Transaction>(DB_KEYS.TRANSACTIONS, MOCK_TRANSACTIONS);
         LocalDB.set(DB_KEYS.TRANSACTIONS, transactions.filter(t => t.id !== id));
     },
 
     deleteTransactionsBulk: async (ids: string[]) => {
-        if (isConfigured) await supabase.from('transactions').delete().in('id', ids);
+        if (isConfigured) {
+            const { error } = await supabase.from('transactions').delete().in('id', ids);
+            if (error) throw error;
+            return;
+        }
         const transactions = LocalDB.get<Transaction>(DB_KEYS.TRANSACTIONS, MOCK_TRANSACTIONS);
         LocalDB.set(DB_KEYS.TRANSACTIONS, transactions.filter(t => !ids.includes(t.id)));
     },
@@ -625,7 +674,8 @@ export const api = {
     getSLATiers: async (): Promise<SLATier[]> => {
         if (isConfigured) {
             const { data, error } = await supabase.from('sla_tiers').select('*');
-            if (!error) return data.map(s => ({
+            if (error) throw error;
+            return data.map(s => ({
                 id: s.id, 
                 name: s.name, 
                 price: s.price, 
@@ -639,14 +689,17 @@ export const api = {
 
     createSLATier: async (sla: Partial<SLATier>): Promise<SLATier> => {
         if (isConfigured) {
-            const { data, error } = await supabase.from('sla_tiers').insert([{ 
+            const payload = { 
                 name: sla.name, 
-                price: sla.price, 
-                included_hours: sla.includedHours, 
+                price: toNumeric(sla.price), 
+                included_hours: toNumeric(sla.includedHours), 
                 description: sla.description, 
-                features: sla.features 
-            }]).select().single();
-            if(!error) return {
+                features: sla.features || []
+            };
+            
+            const { data, error } = await supabase.from('sla_tiers').insert([payload]).select().single();
+            if (error) throw error;
+            return {
                 id: data.id, 
                 name: data.name, 
                 price: data.price, 
@@ -662,7 +715,11 @@ export const api = {
     },
 
     deleteSLATier: async (id: string) => {
-        if (isConfigured) await supabase.from('sla_tiers').delete().eq('id', id);
+        if (isConfigured) {
+            const { error } = await supabase.from('sla_tiers').delete().eq('id', id);
+            if (error) throw error;
+            return;
+        }
         const slas = LocalDB.get<SLATier>(DB_KEYS.SLA_TIERS, DEFAULT_SLA_TIERS);
         LocalDB.set(DB_KEYS.SLA_TIERS, slas.filter(s => s.id !== id));
     },
@@ -678,6 +735,7 @@ export const api = {
     saveWorkConfig: async (config: WorkConfig) => {
         if (isConfigured) {
              await supabase.from('app_settings').upsert({ key: 'work_config', value: config });
+             return;
         }
         LocalDB.setObject(DB_KEYS.SETTINGS_WORK, config);
     },
@@ -693,15 +751,17 @@ export const api = {
     // --- METADATA ---
     getServiceCategories: async (): Promise<ServiceCategory[]> => {
         if (isConfigured) {
-             const { data } = await supabase.from('service_categories').select('*');
-             if(data) return data.map(c => ({...c, isBillable: c.is_billable}));
+             const { data, error } = await supabase.from('service_categories').select('*');
+             if (error) throw error;
+             return data.map(c => ({...c, isBillable: c.is_billable}));
         }
         return LocalDB.get<ServiceCategory>(DB_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
     },
     createServiceCategory: async (name: string, isBillable: boolean) => {
         if (isConfigured) {
-            const { data } = await supabase.from('service_categories').insert([{name, is_billable: isBillable}]).select().single();
-            if(data) return {...data, isBillable: data.is_billable};
+            const { data, error } = await supabase.from('service_categories').insert([{name, is_billable: isBillable}]).select().single();
+            if (error) throw error;
+            return {...data, isBillable: data.is_billable};
         }
         const cats = LocalDB.get<ServiceCategory>(DB_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
         const newCat = { id: generateId(), name, isBillable };
@@ -709,41 +769,52 @@ export const api = {
         return newCat;
     },
     deleteServiceCategory: async (id: string) => {
-        if (isConfigured) await supabase.from('service_categories').delete().eq('id', id);
+        if (isConfigured) {
+            const { error } = await supabase.from('service_categories').delete().eq('id', id);
+            if (error) throw error;
+            return;
+        }
         const cats = LocalDB.get<ServiceCategory>(DB_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
         LocalDB.set(DB_KEYS.CATEGORIES, cats.filter(c => c.id !== id));
     },
 
     getTransactionCategories: async () => {
         if (isConfigured) {
-             const { data } = await supabase.from('transaction_categories').select('*');
-             if(data) return data;
+             const { data, error } = await supabase.from('transaction_categories').select('*');
+             if (error) throw error;
+             return data;
         }
         const cats = LocalDB.get(DB_KEYS.TRANS_CATEGORIES, DEFAULT_CATEGORIES.map(c => ({id: c.id, name: c.name}))); // Fallback mapping
         return cats;
     },
     createTransactionCategory: async (name: string) => {
         if (isConfigured) {
-            const { data } = await supabase.from('transaction_categories').insert([{name}]).select().single();
-            if(data) return data;
+            const { data, error } = await supabase.from('transaction_categories').insert([{name}]).select().single();
+            if (error) throw error;
+            return data;
         }
         return { id: generateId(), name };
     },
     deleteTransactionCategory: async (id: string) => {
-        if (isConfigured) await supabase.from('transaction_categories').delete().eq('id', id);
+        if (isConfigured) {
+             const { error } = await supabase.from('transaction_categories').delete().eq('id', id);
+             if (error) throw error;
+        }
     },
 
     getTaskTemplates: async (): Promise<TaskTemplateGroup[]> => {
         if (isConfigured) {
-            const { data } = await supabase.from('task_template_groups').select('*');
-            if (data) return data;
+            const { data, error } = await supabase.from('task_template_groups').select('*');
+            if (error) throw error;
+            return data;
         }
         return LocalDB.get<TaskTemplateGroup>(DB_KEYS.TEMPLATES, DEFAULT_TASK_TEMPLATES);
     },
     createTaskTemplateGroup: async (group: Partial<TaskTemplateGroup>) => {
         if (isConfigured) {
-            const { data } = await supabase.from('task_template_groups').insert([group]).select().single();
-            if(data) return data;
+            const { data, error } = await supabase.from('task_template_groups').insert([group]).select().single();
+            if (error) throw error;
+            return data;
         }
         const tpls = LocalDB.get<TaskTemplateGroup>(DB_KEYS.TEMPLATES, DEFAULT_TASK_TEMPLATES);
         const newTpl = { ...group, id: generateId() } as TaskTemplateGroup;
@@ -752,7 +823,9 @@ export const api = {
     },
     updateTaskTemplateGroup: async (group: TaskTemplateGroup) => {
         if (isConfigured) {
-             await supabase.from('task_template_groups').update(group).eq('id', group.id);
+             const { error } = await supabase.from('task_template_groups').update(group).eq('id', group.id);
+             if (error) throw error;
+             return group;
         }
         const tpls = LocalDB.get<TaskTemplateGroup>(DB_KEYS.TEMPLATES, DEFAULT_TASK_TEMPLATES);
         const updated = tpls.map(t => t.id === group.id ? group : t);
@@ -760,17 +833,20 @@ export const api = {
         return group;
     },
     deleteTaskTemplateGroup: async (id: string) => {
-        if (isConfigured) await supabase.from('task_template_groups').delete().eq('id', id);
+        if (isConfigured) {
+            const { error } = await supabase.from('task_template_groups').delete().eq('id', id);
+            if (error) throw error;
+            return;
+        }
         const tpls = LocalDB.get<TaskTemplateGroup>(DB_KEYS.TEMPLATES, DEFAULT_TASK_TEMPLATES);
         LocalDB.set(DB_KEYS.TEMPLATES, tpls.filter(t => t.id !== id));
     },
 
     createSubtask: async (taskId: string, title: string): Promise<Subtask> => {
-        // Mock
         return { id: generateId(), title, completed: false };
     },
     toggleSubtask: async (subId: string, completed: boolean) => {
-        // Mock - would update DB
+        // Mock
     },
 
     createComment: async (comment: any): Promise<Comment> => {
@@ -794,15 +870,17 @@ export const api = {
 
     getCustomFields: async (): Promise<CustomFieldDefinition[]> => {
         if (isConfigured) {
-            const { data } = await supabase.from('custom_field_definitions').select('*');
-            if(data) return data;
+            const { data, error } = await supabase.from('custom_field_definitions').select('*');
+            if (error) throw error;
+            return data;
         }
         return LocalDB.get<CustomFieldDefinition>(DB_KEYS.CUSTOM_FIELDS, DEFAULT_CUSTOM_FIELDS);
     },
     createCustomField: async (cf: Partial<CustomFieldDefinition>) => {
         if (isConfigured) {
-            const { data } = await supabase.from('custom_field_definitions').insert([cf]).select().single();
-            if(data) return data;
+            const { data, error } = await supabase.from('custom_field_definitions').insert([cf]).select().single();
+            if (error) throw error;
+            return data;
         }
         const cfs = LocalDB.get<CustomFieldDefinition>(DB_KEYS.CUSTOM_FIELDS, DEFAULT_CUSTOM_FIELDS);
         const newCF = { ...cf, id: generateId() } as CustomFieldDefinition;
@@ -810,18 +888,18 @@ export const api = {
         return newCF;
     },
 
-    // --- PLAYBOOKS (AI POWERED) ---
-    
+    // --- PLAYBOOKS ---
     getPlaybooks: async (): Promise<Playbook[]> => {
         if (isConfigured) {
             const { data, error } = await supabase.from('playbooks').select('*');
-            if (!error) return data.map(p => ({
+            if (error) throw error;
+            return data.map(p => ({
                 ...p, 
                 clientId: p.client_id, 
                 createdAt: p.created_at, 
                 updatedAt: p.updated_at,
                 isPublished: p.is_published,
-                blocks: Array.isArray(p.blocks) ? p.blocks : [] // Ensure blocks is always an array
+                blocks: Array.isArray(p.blocks) ? p.blocks : []
             }));
         }
         return LocalDB.get<Playbook>(DB_KEYS.PLAYBOOKS, []);
@@ -838,10 +916,7 @@ export const api = {
                 is_published: playbook.isPublished || false
             };
             const { data, error } = await supabase.from('playbooks').insert([payload]).select().single();
-            if (error) {
-                console.error("Supabase Error (Create Playbook):", error);
-                throw error;
-            }
+            if (error) throw error;
             return {
                 ...data,
                 clientId: data.client_id,
@@ -874,10 +949,7 @@ export const api = {
                 updated_at: new Date().toISOString()
             };
             const { data, error } = await supabase.from('playbooks').update(payload).eq('id', playbook.id).select().single();
-            if (error) {
-                console.error("Supabase Error (Update Playbook):", error);
-                throw error;
-            }
+            if (error) throw error;
             return {
                 ...data,
                 clientId: data.client_id,
@@ -893,7 +965,11 @@ export const api = {
     },
 
     deletePlaybook: async (id: string) => {
-        if (isConfigured) await supabase.from('playbooks').delete().eq('id', id);
+        if (isConfigured) {
+            const { error } = await supabase.from('playbooks').delete().eq('id', id);
+            if (error) throw error;
+            return;
+        }
         const playbooks = LocalDB.get<Playbook>(DB_KEYS.PLAYBOOKS, []);
         LocalDB.set(DB_KEYS.PLAYBOOKS, playbooks.filter(p => p.id !== id));
     },
@@ -903,28 +979,11 @@ export const api = {
         
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const prompt = `
-            Act as a Senior UX Writer and Technical Consultant.
-            Create a structure for a client training playbook (landing page style) for the client "${clientName}".
+            Act as a Senior UX Writer.
+            Create a structure for a client training playbook for "${clientName}".
             Topic: "${topic}".
-            
-            Return ONLY a valid JSON array of blocks. No markdown, no comments.
-            The structure of a block is: { type: string, content: object }.
-            
-            The available block types and their content schemas are:
-            - 'hero': { content: { title, subtitle, imageUrl } }
-            - 'text': { content: { title, content } }
-            - 'steps': { content: { title, steps: [{ title, description }] } }
-            - 'faq': { content: { title, items: [{ question, answer }] } }
-            - 'alert': { content: { type: 'info'|'warning'|'tip', message } }
-            
-            Example output:
-            [
-              { "type": "hero", "content": { "title": "Welcome", "subtitle": "Guide" } },
-              { "type": "text", "content": { "title": "Intro", "content": "..." } }
-            ]
-
-            Structure the playbook logically: Hero -> Introduction -> Step-by-Step Guide -> Important Alerts -> FAQ.
-            Make the content professional, encouraging, and specific to the requested topic.
+            Return ONLY a valid JSON array of blocks.
+            Types: 'hero', 'text', 'steps', 'faq', 'alert'.
         `;
 
         try {
@@ -937,10 +996,7 @@ export const api = {
             const raw = response.text || '[]';
             const jsonStr = raw.replace(/^```json/, '').replace(/```$/, '');
             const blocks = JSON.parse(jsonStr);
-            
-            // Fix potential structure issues from AI and add IDs
             return blocks.map((b: any) => {
-                // Ensure content object exists. If AI returned flat properties, wrap them.
                 if (!b.content && b.type) {
                     const { type, id, ...rest } = b;
                     return { id: generateId(), type: type, content: rest };
@@ -948,7 +1004,6 @@ export const api = {
                 return { ...b, id: generateId() };
             });
         } catch (e) {
-            console.error("AI Generation Error", e);
             throw new Error("Falha ao gerar estrutura com IA.");
         }
     }

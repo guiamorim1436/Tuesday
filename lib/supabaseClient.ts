@@ -1,47 +1,78 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONFIGURAÇÃO MANUAL (HARDCODED) ---
-// Deixe vazio para usar o MODO OFFLINE (LocalDB) por padrão.
-// Só preencha se tiver credenciais REAIS do Supabase.
+// Utilitário para ler variáveis de ambiente em qualquer bundler (Vite ou Webpack)
+const getEnv = (key: string) => {
+    try {
+        // @ts-ignore - Vite support
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+            // @ts-ignore
+            return import.meta.env[key];
+        }
+    } catch (e) {}
+    
+    try {
+        if (typeof process !== 'undefined' && process.env && process.env[key]) {
+            return process.env[key];
+        }
+    } catch (e) {}
+
+    return '';
+};
+
+// --- CONFIGURAÇÃO ---
 const HARDCODED_URL = ''; 
 const HARDCODED_KEY = ''; 
 
 const getStoredConfig = () => {
     try {
-        // 1. Prioridade Máxima: Hardcoded no arquivo
+        let foundUrl = '';
+        let foundKey = '';
+
+        // 1. Prioridade Máxima: Hardcoded
         if (HARDCODED_URL && HARDCODED_KEY) {
-            return { url: HARDCODED_URL, key: HARDCODED_KEY };
+            foundUrl = HARDCODED_URL;
+            foundKey = HARDCODED_KEY;
         }
-
-        // 2. Ambiente (Production/Vercel)
-        const envUrl = process.env.SUPABASE_URL;
-        const envKey = process.env.SUPABASE_ANON_KEY;
-        
-        if (envUrl && envUrl.startsWith('http') && envKey) {
-             if (!envKey.includes('service_role')) {
-                 return { url: envUrl, key: envKey };
-             }
-        }
-
-        // 3. LocalStorage (Persistência no Navegador)
-        const localUrl = localStorage.getItem('tuesday_supabase_url');
-        const localKey = localStorage.getItem('tuesday_supabase_key');
-        
-        if (localUrl && localUrl.startsWith('http') && localKey) {
-            if (!localKey.includes('service_role')) {
-                return { url: localUrl, key: localKey };
+        // 2. LocalStorage (Persistência Manual no Navegador)
+        else if (typeof window !== 'undefined') {
+            const localUrl = localStorage.getItem('tuesday_supabase_url');
+            const localKey = localStorage.getItem('tuesday_supabase_key');
+            if (localUrl && localKey) {
+                foundUrl = localUrl;
+                foundKey = localKey;
             }
         }
+
+        // 3. Variáveis de Ambiente (Automático)
+        if (!foundUrl || !foundKey) {
+            const envUrl = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL');
+            const envKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY');
+            if (envUrl && envKey) {
+                foundUrl = envUrl;
+                foundKey = envKey;
+            }
+        }
+
+        // Validação Estrita
+        if (foundUrl && foundKey && foundUrl.startsWith('http')) {
+            // Filtros de segurança e placeholders
+            if (foundUrl.includes('placeholder') || foundUrl.includes('your-project')) return { url: '', key: '' };
+            if (foundKey.includes('placeholder') || foundKey.includes('your-anon-key')) return { url: '', key: '' };
+            
+            return { url: foundUrl, key: foundKey };
+        }
+
     } catch (e) {
-        // Ignora erros de acesso (SSR, etc)
+        console.warn("Erro ao configurar Supabase:", e);
     }
     return { url: '', key: '' };
 };
 
 const { url, key } = getStoredConfig();
 
-export const isConfigured = !!(url && key && url.startsWith('http'));
+// Flag global de conexão
+export const isConfigured = !!(url && key);
 
 // Cliente Singleton
 export const supabase = createClient(
@@ -51,7 +82,7 @@ export const supabase = createClient(
         auth: {
             persistSession: true,
             autoRefreshToken: true,
-            detectSessionInUrl: false // Evita conflitos de URL
+            detectSessionInUrl: false
         }
     }
 );
