@@ -174,6 +174,12 @@ export interface WorkConfig {
   taskStatuses?: string[]; 
 }
 
+export interface GoogleSettings {
+    clientId: string;
+    syncEnabled: boolean;
+    defaultCategoryId: string;
+}
+
 export type UserRole = 'admin' | 'partner' | 'client' | 'pending';
 
 export interface UserPermissions {

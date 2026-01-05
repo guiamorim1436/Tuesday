@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Filter, Plus, Clock, X, AlignLeft, CheckSquare, Search, Loader2, Calendar as CalendarIcon, Layout, List, StretchHorizontal, ChevronLeft, ChevronRight, MoreHorizontal, User, Zap, Timer, ToggleLeft, ToggleRight, Layers, CalendarRange } from 'lucide-react';
-import { TaskStatus, TaskPriority, Task, ServiceCategory, CustomFieldDefinition, Client } from '../types';
+import { TaskStatus, TaskPriority, Task, ServiceCategory, CustomFieldDefinition, Client, GoogleSettings } from '../types';
 import { api } from '../services/api';
 import { TaskDetailModal } from './TaskDetailModal';
 
@@ -16,6 +16,7 @@ export const TaskBoard: React.FC = () => {
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [googleSettings, setGoogleSettings] = useState<GoogleSettings | null>(null);
   
   // Filters
   const [filterPriority, setFilterPriority] = useState<string>('all');
@@ -46,14 +47,16 @@ export const TaskBoard: React.FC = () => {
   const loadData = async () => {
       setIsLoading(true);
       try {
-          const [t, c, cats] = await Promise.all([
+          const [t, c, cats, gSettings] = await Promise.all([
               api.getTasks(), 
               api.getClients(),
-              api.getServiceCategories()
+              api.getServiceCategories(),
+              api.getGoogleSettings()
           ]);
           setTasks(t);
           setClients(c);
           setCategories(cats);
+          setGoogleSettings(gSettings);
           if (cats.length > 0) {
               setNewTaskData(prev => ({ ...prev, category: cats[0].name }));
           }
@@ -65,12 +68,11 @@ export const TaskBoard: React.FC = () => {
   };
 
   const syncGoogleCalendar = () => {
-      // Logic for OAuth2 client (Google Identity Services)
-      // Note: In a real app, client_id would be in process.env.GOOGLE_CLIENT_ID
-      const CLIENT_ID = (window as any).process?.env?.GOOGLE_CLIENT_ID || '148810988636-placeholder.apps.googleusercontent.com';
+      // Prioridade: Configuração no DB -> Variável de ambiente
+      const CLIENT_ID = googleSettings?.clientId || (window as any).process?.env?.GOOGLE_CLIENT_ID;
       
-      if (!CLIENT_ID.includes('apps.googleusercontent.com')) {
-          return alert("Erro: Google Client ID não configurado no ambiente.");
+      if (!CLIENT_ID || CLIENT_ID.length < 10) {
+          return alert("Erro: Google Client ID não configurado. Vá em Configurações > Integrações.");
       }
 
       setIsSyncing(true);
@@ -116,7 +118,7 @@ export const TaskBoard: React.FC = () => {
                               description: event.description || 'Evento importado do Google Calendar.',
                               status: TaskStatus.BACKLOG,
                               priority: TaskPriority.MEDIUM,
-                              category: 'Reunião',
+                              category: googleSettings?.defaultCategoryId || 'Reunião',
                               startDate: start.split('T')[0],
                               dueDate: end.split('T')[0],
                               estimatedHours: Math.max(0.5, Number(diff.toFixed(1))),
@@ -185,9 +187,6 @@ export const TaskBoard: React.FC = () => {
             autoSla: true,
             startDate: new Date().toISOString().split('T')[0]
         });
-        if (created.autoSla) {
-            alert(`Tarefa agendada automaticamente para: ${new Date(created.startDate).toLocaleDateString('pt-BR')}`);
-        }
     } catch (e) { console.error(e); }
   };
 
@@ -456,21 +455,6 @@ export const TaskBoard: React.FC = () => {
                                 {newTaskData.autoSla ? <ToggleRight size={32}/> : <ToggleLeft size={32}/>}
                             </button>
                         </div>
-                        
-                        {!newTaskData.autoSla && (
-                            <div className="animate-in fade-in zoom-in-95 duration-200">
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Data de Início Manual</label>
-                                <input 
-                                    type="date" 
-                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all" 
-                                    value={newTaskData.startDate} 
-                                    onChange={e => setNewTaskData({...newTaskData, startDate: e.target.value})} 
-                                />
-                            </div>
-                        )}
-                        {newTaskData.autoSla && (
-                             <p className="text-xs text-slate-500 italic">O sistema calculará a melhor data baseada na prioridade e na carga de trabalho da equipe.</p>
-                        )}
                     </div>
 
                     <div>

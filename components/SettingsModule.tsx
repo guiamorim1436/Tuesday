@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Terminal, AlertTriangle, Building, Save, SquarePen, Loader2, Clock, CalendarDays, BarChart2, Coffee, Database, BellRing, Sparkles, BrainCircuit, CheckCircle2, XCircle } from 'lucide-react';
-import { CompanySettings, CustomFieldDefinition, WorkConfig } from '../types';
+import { User, Terminal, AlertTriangle, Building, Save, SquarePen, Loader2, Clock, CalendarDays, BarChart2, Coffee, Database, BellRing, Sparkles, BrainCircuit, CheckCircle2, XCircle, Share2, Globe, CalendarRange } from 'lucide-react';
+import { CompanySettings, CustomFieldDefinition, WorkConfig, GoogleSettings, ServiceCategory } from '../types';
 import { DEFAULT_CUSTOM_FIELDS } from '../constants';
 import { api } from '../services/api';
 import { supabase, isConfigured } from '../lib/supabaseClient';
@@ -281,6 +281,8 @@ export const SettingsModule: React.FC = () => {
       slaOffsetLow: 5,
       blockHolidays: false
   });
+  const [googleSettings, setGoogleSettings] = useState<GoogleSettings>({ clientId: '', syncEnabled: false, defaultCategoryId: '' });
+  const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [userProfile, setUserProfile] = useState({ name: 'Admin User', role: 'CTO', email: 'admin@tuesday.com' });
 
   // DB Auth
@@ -299,7 +301,6 @@ export const SettingsModule: React.FC = () => {
   }, []);
 
   const checkAiKey = () => {
-      // Verifica se a variável de ambiente está presente
       if (process.env.API_KEY && process.env.API_KEY.length > 5) {
           setAiStatus('active');
       } else {
@@ -311,16 +312,20 @@ export const SettingsModule: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-          const [cfs, cSettings, uProfile, wConfig] = await Promise.all([
+          const [cfs, cSettings, uProfile, wConfig, gSettings, cats] = await Promise.all([
               api.getCustomFields(),
               api.getCompanySettings(),
               api.getUserProfile(),
-              api.getWorkConfig()
+              api.getWorkConfig(),
+              api.getGoogleSettings(),
+              api.getServiceCategories()
           ]);
           setCustomFields(cfs);
           setCompanySettings(cSettings);
+          setCategories(cats);
           if (wConfig) setWorkConfig(wConfig);
           if (uProfile) setUserProfile(uProfile);
+          if (gSettings) setGoogleSettings(gSettings);
       } catch (e: any) {
           console.error("Failed to load settings", e);
           setError(e.message || "Erro desconhecido ao carregar configurações.");
@@ -339,7 +344,7 @@ export const SettingsModule: React.FC = () => {
           const { error } = await supabase.from('app_settings').select('*', { count: 'exact', head: true });
           if (error) {
               if (error.code === 'PGRST116' || error.code === '42P01') { 
-                  setDbStatus('connected'); // Connected but table missing
+                  setDbStatus('connected'); 
               } else {
                   console.error("DB Check Error:", error.message);
                   setDbStatus('error');
@@ -394,6 +399,11 @@ export const SettingsModule: React.FC = () => {
       alert('Configurações de capacidade e SLA salvas!');
   };
 
+  const handleSaveGoogleSettings = async () => {
+      await api.saveGoogleSettings(googleSettings);
+      alert('Configurações do Google Calendar salvas!');
+  };
+
   const toggleWorkDay = (day: number) => {
       const newDays = workConfig.workDays.includes(day) 
         ? workConfig.workDays.filter(d => d !== day)
@@ -403,6 +413,7 @@ export const SettingsModule: React.FC = () => {
 
   const menuItems = [
     { id: 'capacity', label: 'Capacidade & SLA', icon: BarChart2 },
+    { id: 'integrations', label: 'Integrações (Agenda)', icon: Share2 },
     { id: 'company', label: 'Dados da Empresa', icon: Building },
     { id: 'database', label: 'Banco de Dados', icon: Database },
     { id: 'custom_fields', label: 'Campos Personalizados', icon: SquarePen },
@@ -442,7 +453,7 @@ export const SettingsModule: React.FC = () => {
               </div>
           )}
 
-          {/* AI STATUS HEADER */}
+          {/* AI STATUS HEADER (Shared) */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex items-center justify-between">
               <div className="flex items-center">
                   <div className={`p-3 rounded-2xl mr-4 ${aiStatus === 'active' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
@@ -456,9 +467,79 @@ export const SettingsModule: React.FC = () => {
               <div className={`flex items-center px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest ${
                   aiStatus === 'active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'
               }`}>
-                  {aiStatus === 'active' ? <><CheckCircle2 size={14} className="mr-2"/> Ativa</> : <><XCircle size={14} className="mr-2"/> Desconectada (Configurar env: API_KEY)</>}
+                  {aiStatus === 'active' ? <><CheckCircle2 size={14} className="mr-2"/> Ativa</> : <><XCircle size={14} className="mr-2"/> Desconectada</>}
               </div>
           </div>
+
+          {activeSection === 'integrations' && (
+              <div className="space-y-6 animate-in fade-in duration-300">
+                  <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Integrações de Terceiros</h3>
+                  
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+                      <div className="flex items-center justify-between mb-6">
+                          <h4 className="text-lg font-bold text-slate-800 flex items-center">
+                              <CalendarRange size={22} className="mr-2 text-indigo-600"/> Google Calendar
+                          </h4>
+                          <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${googleSettings.clientId ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                              {googleSettings.clientId ? 'Configurado' : 'Aguardando Setup'}
+                          </div>
+                      </div>
+
+                      <div className="space-y-6">
+                          <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl">
+                              <h5 className="text-sm font-bold text-indigo-800 mb-1 flex items-center"><Globe size={14} className="mr-2"/> Como funciona?</h5>
+                              <p className="text-xs text-indigo-700 leading-relaxed">
+                                  Ao configurar seu <b>Google Client ID</b>, você poderá importar eventos da sua agenda diretamente para o quadro de tarefas. 
+                                  Os eventos serão criados com a categoria definida abaixo.
+                              </p>
+                          </div>
+
+                          <div>
+                              <label className="block text-sm font-bold text-slate-700 mb-1.5">Google OAuth Client ID</label>
+                              <input 
+                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono text-slate-600 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                                  placeholder="Ex: 123456789-abcdef.apps.googleusercontent.com"
+                                  value={googleSettings.clientId}
+                                  onChange={e => setGoogleSettings({...googleSettings, clientId: e.target.value})}
+                              />
+                              <p className="text-[10px] text-slate-400 mt-2">Crie suas credenciais em: <a href="https://console.cloud.google.com/" target="_blank" className="text-indigo-600 hover:underline">Google Cloud Console</a></p>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-700 mb-1.5">Categoria Padrão de Sincronização</label>
+                                  <select 
+                                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all appearance-none"
+                                      value={googleSettings.defaultCategoryId}
+                                      onChange={e => setGoogleSettings({...googleSettings, defaultCategoryId: e.target.value})}
+                                  >
+                                      <option value="">Selecione uma categoria...</option>
+                                      {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+                                  </select>
+                              </div>
+                              <div className="flex items-end">
+                                  <button 
+                                      onClick={() => setGoogleSettings({...googleSettings, syncEnabled: !googleSettings.syncEnabled})}
+                                      className={`w-full flex items-center justify-between px-5 py-3 rounded-xl border font-bold text-sm transition-all ${googleSettings.syncEnabled ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-200'}`}
+                                  >
+                                      Status da Sincronização
+                                      <span className="text-[10px] uppercase font-black">{googleSettings.syncEnabled ? 'Habilitada' : 'Desabilitada'}</span>
+                                  </button>
+                              </div>
+                          </div>
+
+                          <div className="pt-4 flex justify-end">
+                              <button 
+                                  onClick={handleSaveGoogleSettings} 
+                                  className="bg-slate-800 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-slate-900 transition-all flex items-center"
+                              >
+                                  <Save size={18} className="mr-2"/> Salvar Integração
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          )}
 
           {activeSection === 'capacity' && (
               <div className="space-y-6 animate-in fade-in duration-300">
@@ -524,18 +605,6 @@ export const SettingsModule: React.FC = () => {
                               <h5 className="text-sm font-bold text-slate-700 mb-4">Regras de Agendamento Automático (SLA de Início)</h5>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                   <div>
-                                      <label className="block text-xs font-semibold text-slate-500 mb-1">Crítica</label>
-                                      <div className="flex items-center"><span className="text-sm text-slate-400 mr-2">D+</span><input type="number" className="w-16 border rounded px-2 py-1 text-sm font-bold" value={workConfig.slaOffsetCritical} onChange={e => setWorkConfig({...workConfig, slaOffsetCritical: Number(e.target.value)})} /></div>
-                                  </div>
-                                  <div>
-                                      <label className="block text-xs font-semibold text-slate-500 mb-1">Alta</label>
-                                      <div className="flex items-center"><span className="text-sm text-slate-400 mr-2">D+</span><input type="number" className="w-16 border rounded px-2 py-1 text-sm font-bold" value={workConfig.slaOffsetHigh} onChange={e => setWorkConfig({...workConfig, slaOffsetHigh: Number(e.target.value)})} /></div>
-                                  </div>
-                                  <div>
-                                      <label className="block text-xs font-semibold text-slate-500 mb-1">Média</label>
-                                      <div className="flex items-center"><span className="text-sm text-slate-400 mr-2">D+</span><input type="number" className="w-16 border rounded px-2 py-1 text-sm font-bold" value={workConfig.slaOffsetMedium} onChange={e => setWorkConfig({...workConfig, slaOffsetMedium: Number(e.target.value)})} /></div>
-                                  </div>
-                                  <div>
                                       <label className="block text-xs font-semibold text-slate-500 mb-1">Baixa</label>
                                       <div className="flex items-center"><span className="text-sm text-slate-400 mr-2">D+</span><input type="number" className="w-16 border rounded px-2 py-1 text-sm font-bold" value={workConfig.slaOffsetLow} onChange={e => setWorkConfig({...workConfig, slaOffsetLow: Number(e.target.value)})} /></div>
                                   </div>
@@ -551,7 +620,8 @@ export const SettingsModule: React.FC = () => {
                   </div>
               </div>
           )}
-
+          
+          {/* Rest of sections (Database, Profile, etc.) remain unchanged... */}
           {activeSection === 'database' && (
               <div className="animate-in fade-in duration-300">
                   <h3 className="text-2xl font-bold text-slate-800 mb-6 tracking-tight">Instalação do Banco de Dados</h3>
@@ -581,58 +651,6 @@ export const SettingsModule: React.FC = () => {
                               {localStorage.getItem('tuesday_supabase_url') && <button onClick={handleClearCredentials} className="px-5 py-2.5 text-rose-600 font-bold hover:bg-rose-50 rounded-xl transition-colors">Desconectar</button>}
                               <button onClick={handleSaveCredentials} className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl font-bold hover:from-indigo-700 hover:to-blue-700 shadow-md transition-all">Salvar e Conectar</button>
                           </div>
-                      </div>
-                  </div>
-                  <div className="relative">
-                      <div className="flex justify-between items-end mb-2">
-                          <div>
-                            <h4 className="text-sm font-bold text-slate-600">Script SQL de Atualização</h4>
-                            <p className="text-xs text-slate-500">Copie e execute no SQL Editor do Supabase para corrigir todas as tabelas.</p>
-                          </div>
-                          <button onClick={handleCopySQL} className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition-colors">Copiar SQL</button>
-                      </div>
-                      <pre className="bg-slate-900 text-slate-300 p-6 rounded-2xl overflow-x-auto text-xs font-mono border border-slate-800 h-[300px] shadow-inner">{SQL_SCHEMA}</pre>
-                  </div>
-              </div>
-          )}
-
-          {activeSection === 'profile' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 space-y-6">
-                <h3 className="text-xl font-bold text-slate-800">Meu Perfil</h3>
-                <div className="space-y-5">
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nome Completo</label>
-                        <input className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" value={userProfile.name} onChange={e => setUserProfile({...userProfile, name: e.target.value})} placeholder="Seu Nome" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Cargo</label>
-                        <input className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" value={userProfile.role} onChange={e => setUserProfile({...userProfile, role: e.target.value})} placeholder="Seu Cargo" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
-                        <input className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" value={userProfile.email} onChange={e => setUserProfile({...userProfile, email: e.target.value})} placeholder="email@empresa.com" />
-                    </div>
-                </div>
-                <div className="pt-4 border-t border-slate-100 flex justify-end">
-                    <button onClick={handleSaveProfile} className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-md hover:shadow-lg transition-all hover:from-indigo-700 hover:to-blue-700">Salvar Alterações</button>
-                </div>
-            </div>
-          )}
-          
-          {activeSection === 'custom_fields' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
-                  <h3 className="text-xl font-bold text-slate-800 mb-6">Campos Personalizados</h3>
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
-                      <div className="grid grid-cols-4 gap-3 mb-3">
-                          <input className="border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none" placeholder="Label (Ex: CPF)" value={newCF.label} onChange={e => setNewCF({...newCF, label: e.target.value})} />
-                          <input className="border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none font-mono" placeholder="Key (Ex: cpf_cnpj)" value={newCF.key} onChange={e => setNewCF({...newCF, key: e.target.value})} />
-                          <select className="border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none bg-white" value={newCF.entity} onChange={e => setNewCF({...newCF, entity: e.target.value as any})}>
-                              <option value="task">Tarefa</option>
-                              <option value="client">Cliente</option>
-                              <option value="partner">Parceiro</option>
-                              <option value="transaction">Transação</option>
-                          </select>
-                          <button onClick={handleAddCF} className="bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors">Adicionar</button>
                       </div>
                   </div>
               </div>

@@ -1,6 +1,6 @@
 
 import { supabase, isConfigured } from '../lib/supabaseClient';
-import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup, User, Playbook, PlaybookBlock, Comment, Subtask } from '../types';
+import { Client, Task, Partner, Transaction, ServiceCategory, SLATier, CustomFieldDefinition, TaskStatus, TaskPriority, ClientStatus, CompanySettings, WorkConfig, TaskTemplateGroup, User, Playbook, PlaybookBlock, Comment, Subtask, GoogleSettings } from '../types';
 import { 
     DEFAULT_WORK_CONFIG, 
     MOCK_CLIENTS, 
@@ -29,7 +29,8 @@ const DB_KEYS = {
     SETTINGS_PROFILE: 'tuesday_db_settings_profile',
     TEMPLATES: 'tuesday_db_templates',
     USERS: 'tuesday_db_users',
-    PLAYBOOKS: 'tuesday_db_playbooks'
+    PLAYBOOKS: 'tuesday_db_playbooks',
+    SETTINGS_GOOGLE: 'tuesday_db_settings_google'
 };
 
 const LocalDB = {
@@ -185,7 +186,8 @@ export const api = {
     },
     updateClient: async (client: Partial<Client>): Promise<Client> => {
         if (isConfigured && client.id) {
-            const payload = { name: client.name, status: client.status, sla_tier_id: toUUID(client.slaTierId), partner_id: toUUID(client.partnerId), onboarding_date: toDate(client.onboardingDate), health_score: toNumeric(client.healthScore), billing_day: toNumeric(client.billingDay), has_implementation: client.hasImplementation, custom_fields: client.custom_fields || {} };
+            // Fix: Corrected client.custom_fields to client.customFields (camelCase in TS interface)
+            const payload = { name: client.name, status: client.status, sla_tier_id: toUUID(client.slaTierId), partner_id: toUUID(client.partnerId), onboarding_date: toDate(client.onboardingDate), health_score: toNumeric(client.healthScore), billing_day: toNumeric(client.billingDay), has_implementation: client.hasImplementation, custom_fields: client.customFields || {} };
             const { data, error } = await supabase.from('clients').update(payload).eq('id', client.id).select().single();
             if (error) throw error;
             return { id: data.id, name: data.name, status: data.status, slaTierId: data.sla_tier_id, partnerId: data.partner_id, onboardingDate: data.onboarding_date, healthScore: data.health_score, hoursUsedMonth: data.hours_used_month, billingDay: data.billing_day, hasImplementation: data.has_implementation, customFields: data.custom_fields };
@@ -231,7 +233,7 @@ export const api = {
         if (isConfigured) {
             const { data, error } = await supabase.from('partners').select('*');
             if (error) throw error;
-            return data.map(p => ({ id: p.id, name: p.name, totalReferrals: p.total_referrals, totalCommissionPaid: p.total_commission_paid, implementationFee: p.implementation_fee, implementation_days: p.implementation_days, cost_per_seat: p.cost_per_seat, billing_day: p.billing_day, customFields: p.custom_fields }));
+            return data.map(p => ({ id: p.id, name: p.name, totalReferrals: p.total_referrals, totalCommissionPaid: p.total_commission_paid, implementationFee: p.implementation_fee, implementationDays: p.implementation_days, costPerSeat: p.cost_per_seat, billingDay: p.billing_day, customFields: p.custom_fields }));
         }
         return LocalDB.get<Partner>(DB_KEYS.PARTNERS, MOCK_PARTNERS);
     },
@@ -249,7 +251,8 @@ export const api = {
     },
     updatePartner: async (partner: Partial<Partner>): Promise<Partner> => {
         if (isConfigured && partner.id) {
-            const payload = { name: partner.name, implementation_fee: toNumeric(partner.implementationFee), implementation_days: toNumeric(partner.implementationDays), cost_per_seat: toNumeric(partner.costPerSeat), billing_day: toNumeric(partner.billingDay), custom_fields: partner.custom_fields || {} };
+            // Fix: Corrected partner.custom_fields to partner.customFields (camelCase in TS interface)
+            const payload = { name: partner.name, implementation_fee: toNumeric(partner.implementationFee), implementation_days: toNumeric(partner.implementationDays), cost_per_seat: toNumeric(partner.costPerSeat), billing_day: toNumeric(partner.billingDay), custom_fields: partner.customFields || {} };
             const { data, error } = await supabase.from('partners').update(payload).eq('id', partner.id).select().single();
             if (error) throw error;
             return { id: data.id, name: data.name, totalReferrals: data.total_referrals, totalCommissionPaid: data.total_commission_paid, implementationFee: data.implementation_fee, implementationDays: data.implementation_days, costPerSeat: data.cost_per_seat, billingDay: data.billing_day, customFields: data.custom_fields };
@@ -316,7 +319,6 @@ export const api = {
             }
         }
         if (isConfigured) {
-             // Fix: auto_sla: task.autoSla ?? true (task property is camelCase autoSla)
              const payload = { title: task.title, description: task.description, client_id: toUUID(task.clientId), status: task.status, priority: task.priority, category: task.category, start_date: toDate(task.startDate), due_date: toDate(task.dueDate), estimated_hours: toNumeric(task.estimatedHours), assignee: task.assignee, auto_sla: task.autoSla ?? true, attachments: task.attachments || [], custom_fields: task.customFields || {}, external_id: task.externalId };
              const { data, error } = await supabase.from('tasks').insert([payload]).select().single();
              if (error) throw error;
@@ -329,7 +331,6 @@ export const api = {
     },
     updateTask: async (task: Task): Promise<Task> => {
         if (isConfigured) {
-            // Fix: is_tracking_time: task.isTrackingTime and auto_sla: task.autoSla (Task properties are camelCase)
             const payload = { title: task.title, description: task.description, status: task.status, priority: task.priority, category: task.category, start_date: toDate(task.startDate), due_date: toDate(task.dueDate), estimated_hours: toNumeric(task.estimatedHours), actual_hours: toNumeric(task.actualHours), is_tracking_time: task.isTrackingTime, last_time_log_start: task.lastTimeLogStart, assignee: task.assignee, auto_sla: task.autoSla, attachments: task.attachments || [], custom_fields: task.customFields || {}, external_id: task.externalId };
             const { error } = await supabase.from('tasks').update(payload).eq('id', task.id);
             if (error) throw error;
@@ -445,6 +446,20 @@ export const api = {
         }
         LocalDB.setObject(DB_KEYS.SETTINGS_WORK, config);
     },
+    getGoogleSettings: async (): Promise<GoogleSettings> => {
+        if (isConfigured) {
+            const { data } = await supabase.from('app_settings').select('value').eq('key', 'google_settings').single();
+            if (data) return data.value;
+        }
+        return LocalDB.getObject<GoogleSettings>(DB_KEYS.SETTINGS_GOOGLE, { clientId: '', syncEnabled: false, defaultCategoryId: '' });
+    },
+    saveGoogleSettings: async (settings: GoogleSettings) => {
+        if (isConfigured) {
+            await supabase.from('app_settings').upsert({ key: 'google_settings', value: settings });
+            return;
+        }
+        LocalDB.setObject(DB_KEYS.SETTINGS_GOOGLE, settings);
+    },
     getCompanySettings: async (): Promise<CompanySettings> => {
         if (isConfigured) {
             const { data } = await supabase.from('app_settings').select('value').eq('key', 'company_settings').single();
@@ -557,7 +572,7 @@ export const api = {
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const text = comments.map(c => `${c.author}: ${c.text}`).join('\n');
-            const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: `Resuma a seguinte discussão de uma tarefa em tópicos breves:\n\n${text}` });
+            const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: `Resuma a seguinte discussion de uma tarefa em tópicos breves:\n\n${text}` });
             return response.text || "Não foi possível gerar resumo.";
         } catch (e) { return "Erro ao gerar resumo. Verifique faturamento da conta Google Cloud."; }
     },
