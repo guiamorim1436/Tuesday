@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Terminal, AlertTriangle, Building, Save, SquarePen, Loader2, Clock, CalendarDays, BarChart2, Coffee, Database, BellRing } from 'lucide-react';
+import { User, Terminal, AlertTriangle, Building, Save, SquarePen, Loader2, Clock, CalendarDays, BarChart2, Coffee, Database, BellRing, Sparkles, BrainCircuit, CheckCircle2, XCircle } from 'lucide-react';
 import { CompanySettings, CustomFieldDefinition, WorkConfig } from '../types';
 import { DEFAULT_CUSTOM_FIELDS } from '../constants';
 import { api } from '../services/api';
@@ -262,6 +262,7 @@ export const SettingsModule: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'offline' | 'error'>('checking');
+  const [aiStatus, setAiStatus] = useState<'active' | 'inactive'>('inactive');
   
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
   const [newCF, setNewCF] = useState<Partial<CustomFieldDefinition>>({ entity: 'task', type: 'text', label: '', key: '' });
@@ -289,12 +290,22 @@ export const SettingsModule: React.FC = () => {
   useEffect(() => {
     loadSettings();
     checkDbConnection();
+    checkAiKey();
     
     const storedUrl = localStorage.getItem('tuesday_supabase_url');
     const storedKey = localStorage.getItem('tuesday_supabase_key');
     if(storedUrl) setSupaUrl(storedUrl);
     if(storedKey) setSupaKey(storedKey);
   }, []);
+
+  const checkAiKey = () => {
+      // Verifica se a variável de ambiente está presente
+      if (process.env.API_KEY && process.env.API_KEY.length > 5) {
+          setAiStatus('active');
+      } else {
+          setAiStatus('inactive');
+      }
+  };
 
   const loadSettings = async () => {
       setIsLoading(true);
@@ -423,31 +434,31 @@ export const SettingsModule: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-10 relative">
-        {/* GLOBAL SQL NOTIFICATION */}
-        <div className="absolute top-0 left-0 right-0 px-10 pt-4 z-10 pointer-events-none">
-            <div className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-6 py-3 rounded-xl shadow-lg shadow-indigo-500/20 flex justify-between items-center pointer-events-auto transform transition-all hover:scale-[1.01]">
-                <div className="flex items-center">
-                    <div className="p-2 bg-white/20 rounded-lg mr-3 animate-pulse">
-                        <BellRing size={20} />
-                    </div>
-                    <div>
-                        <p className="text-sm font-bold">Lembrete de Sistema</p>
-                        <p className="text-xs text-indigo-100">Atualização do Banco de Dados necessária. Rode o novo script.</p>
-                    </div>
-                </div>
-                <button onClick={() => setActiveSection('database')} className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition-colors">
-                    Ver Script
-                </button>
-            </div>
-        </div>
-
-        <div className="max-w-4xl mx-auto mt-20">
+        <div className="max-w-4xl mx-auto space-y-8">
           {error && activeSection !== 'database' && (
               <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm flex items-center">
                   <AlertTriangle className="mr-2" size={16}/>
                   {error}
               </div>
           )}
+
+          {/* AI STATUS HEADER */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex items-center justify-between">
+              <div className="flex items-center">
+                  <div className={`p-3 rounded-2xl mr-4 ${aiStatus === 'active' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                      <BrainCircuit size={28}/>
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-slate-800 text-lg">Inteligência Artificial (Gemini)</h3>
+                      <p className="text-sm text-slate-500">Recursos de Wiki Automática e Resumos</p>
+                  </div>
+              </div>
+              <div className={`flex items-center px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest ${
+                  aiStatus === 'active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'
+              }`}>
+                  {aiStatus === 'active' ? <><CheckCircle2 size={14} className="mr-2"/> Ativa</> : <><XCircle size={14} className="mr-2"/> Desconectada (Configurar env: API_KEY)</>}
+              </div>
+          </div>
 
           {activeSection === 'capacity' && (
               <div className="space-y-6 animate-in fade-in duration-300">
@@ -529,7 +540,6 @@ export const SettingsModule: React.FC = () => {
                                       <div className="flex items-center"><span className="text-sm text-slate-400 mr-2">D+</span><input type="number" className="w-16 border rounded px-2 py-1 text-sm font-bold" value={workConfig.slaOffsetLow} onChange={e => setWorkConfig({...workConfig, slaOffsetLow: Number(e.target.value)})} /></div>
                                   </div>
                               </div>
-                              <p className="text-xs text-slate-400 mt-4 italic">* O sistema tentará agendar a tarefa para Hoje + Dias definidos acima. Se o dia estiver lotado (baseado nos limites acima), a tarefa será empurrada para o próximo slot disponível.</p>
                           </div>
                       </div>
                   </div>
@@ -624,17 +634,6 @@ export const SettingsModule: React.FC = () => {
                           </select>
                           <button onClick={handleAddCF} className="bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors">Adicionar</button>
                       </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                      {customFields.map(cf => (
-                          <div key={cf.id} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg hover:bg-slate-50 transition-colors">
-                              <div>
-                                  <p className="text-sm font-bold text-slate-800">{cf.label} <span className="text-xs font-normal text-slate-500 font-mono">({cf.key})</span></p>
-                                  <p className="text-xs text-slate-500 uppercase tracking-wider">{cf.entity}</p>
-                              </div>
-                          </div>
-                      ))}
                   </div>
               </div>
           )}

@@ -13,7 +13,8 @@ interface ErrorBoundaryState {
 
 // Ensure ErrorBoundary correctly extends React.Component with props and state types
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly declaring state to ensure TS recognizes it on the instance
+  // Explicitly declaring state and props to ensure TS recognizes them on the instance
+  public props: ErrorBoundaryProps;
   public state: ErrorBoundaryState = {
     hasError: false,
     error: null,
@@ -62,6 +63,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
 
     // Accessing props property through this context
+    // Fix: This correctly uses this.props.children once props is recognized on the instance
     return this.props.children;
   }
 }

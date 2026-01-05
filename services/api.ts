@@ -185,7 +185,7 @@ export const api = {
     },
     updateClient: async (client: Partial<Client>): Promise<Client> => {
         if (isConfigured && client.id) {
-            const payload = { name: client.name, status: client.status, sla_tier_id: toUUID(client.slaTierId), partner_id: toUUID(client.partnerId), onboarding_date: toDate(client.onboardingDate), health_score: toNumeric(client.healthScore), billing_day: toNumeric(client.billingDay), has_implementation: client.hasImplementation, custom_fields: client.customFields || {} };
+            const payload = { name: client.name, status: client.status, sla_tier_id: toUUID(client.slaTierId), partner_id: toUUID(client.partnerId), onboarding_date: toDate(client.onboardingDate), health_score: toNumeric(client.healthScore), billing_day: toNumeric(client.billingDay), has_implementation: client.hasImplementation, custom_fields: client.custom_fields || {} };
             const { data, error } = await supabase.from('clients').update(payload).eq('id', client.id).select().single();
             if (error) throw error;
             return { id: data.id, name: data.name, status: data.status, slaTierId: data.sla_tier_id, partnerId: data.partner_id, onboardingDate: data.onboarding_date, healthScore: data.health_score, hoursUsedMonth: data.hours_used_month, billingDay: data.billing_day, hasImplementation: data.has_implementation, customFields: data.custom_fields };
@@ -231,13 +231,13 @@ export const api = {
         if (isConfigured) {
             const { data, error } = await supabase.from('partners').select('*');
             if (error) throw error;
-            return data.map(p => ({ id: p.id, name: p.name, totalReferrals: p.total_referrals, totalCommissionPaid: p.total_commission_paid, implementationFee: p.implementation_fee, implementationDays: p.implementation_days, costPerSeat: p.cost_per_seat, billingDay: p.billing_day, customFields: p.custom_fields }));
+            return data.map(p => ({ id: p.id, name: p.name, totalReferrals: p.total_referrals, totalCommissionPaid: p.total_commission_paid, implementationFee: p.implementation_fee, implementation_days: p.implementation_days, cost_per_seat: p.cost_per_seat, billing_day: p.billing_day, customFields: p.custom_fields }));
         }
         return LocalDB.get<Partner>(DB_KEYS.PARTNERS, MOCK_PARTNERS);
     },
     createPartner: async (partner: Partial<Partner>): Promise<Partner> => {
         if (isConfigured) {
-            const payload = { name: partner.name, total_referrals: toNumeric(partner.totalReferrals), total_commission_paid: toNumeric(partner.totalCommissionPaid), implementation_fee: toNumeric(partner.implementationFee), implementation_days: toNumeric(partner.implementationDays), cost_per_seat: toNumeric(partner.cost_per_seat), billing_day: toNumeric(partner.billingDay), custom_fields: partner.customFields || {} };
+            const payload = { name: partner.name, total_referrals: toNumeric(partner.totalReferrals), total_commission_paid: toNumeric(partner.totalCommissionPaid), implementation_fee: toNumeric(partner.implementationFee), implementation_days: toNumeric(partner.implementationDays), cost_per_seat: toNumeric(partner.costPerSeat), billing_day: toNumeric(partner.billingDay), custom_fields: partner.customFields || {} };
             const { data, error } = await supabase.from('partners').insert([payload]).select().single();
             if (error) throw error;
             return { id: data.id, name: data.name, totalReferrals: data.total_referrals, totalCommissionPaid: data.total_commission_paid, implementationFee: data.implementation_fee, implementationDays: data.implementation_days, costPerSeat: data.cost_per_seat, billingDay: data.billing_day, customFields: data.custom_fields };
@@ -249,7 +249,7 @@ export const api = {
     },
     updatePartner: async (partner: Partial<Partner>): Promise<Partner> => {
         if (isConfigured && partner.id) {
-            const payload = { name: partner.name, implementation_fee: toNumeric(partner.implementationFee), implementation_days: toNumeric(partner.implementationDays), cost_per_seat: toNumeric(partner.cost_per_seat), billing_day: toNumeric(partner.billingDay), custom_fields: partner.customFields || {} };
+            const payload = { name: partner.name, implementation_fee: toNumeric(partner.implementationFee), implementation_days: toNumeric(partner.implementationDays), cost_per_seat: toNumeric(partner.costPerSeat), billing_day: toNumeric(partner.billingDay), custom_fields: partner.custom_fields || {} };
             const { data, error } = await supabase.from('partners').update(payload).eq('id', partner.id).select().single();
             if (error) throw error;
             return { id: data.id, name: data.name, totalReferrals: data.total_referrals, totalCommissionPaid: data.total_commission_paid, implementationFee: data.implementation_fee, implementationDays: data.implementation_days, costPerSeat: data.cost_per_seat, billingDay: data.billing_day, customFields: data.custom_fields };
@@ -295,9 +295,8 @@ export const api = {
         if (isConfigured) {
              const { data, error } = await supabase.from('tasks').select('*');
              if (error) throw error;
-             return data.map(t => ({ id: t.id, title: t.title, description: t.description, clientId: t.client_id, status: t.status, priority: t.priority, category: t.category, startDate: t.start_date, dueDate: t.due_date, createdAt: t.created_at, estimatedHours: t.estimated_hours, actualHours: t.actual_hours, autoSla: t.auto_sla ?? true, isTrackingTime: t.is_tracking_time, lastTimeLogStart: t.last_time_log_start ? Number(t.last_time_log_start) : undefined, assignee: t.assignee, participants: t.participants || [], watchers: t.watchers || [], customFields: t.custom_fields, attachments: t.attachments || [], subtasks: [], comments: [] }));
+             return data.map(t => ({ id: t.id, title: t.title, description: t.description, clientId: t.client_id, status: t.status, priority: t.priority, category: t.category, startDate: t.start_date, dueDate: t.due_date, createdAt: t.created_at, estimatedHours: t.estimated_hours, actualHours: t.actual_hours, autoSla: t.auto_sla ?? true, isTrackingTime: t.is_tracking_time, lastTimeLogStart: t.last_time_log_start ? Number(t.last_time_log_start) : undefined, assignee: t.assignee, participants: t.participants || [], watchers: t.watchers || [], customFields: t.custom_fields, attachments: t.attachments || [], subtasks: [], comments: [], externalId: t.external_id }));
         }
-        // Fixed mapping to use camelCase autoSla property from the domain model
         return LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS).map(t => ({...t, autoSla: t.autoSla ?? true}));
     },
     createTask: async (task: Partial<Task>): Promise<Task> => {
@@ -317,10 +316,11 @@ export const api = {
             }
         }
         if (isConfigured) {
-             const payload = { title: task.title, description: task.description, client_id: toUUID(task.clientId), status: task.status, priority: task.priority, category: task.category, start_date: toDate(task.startDate), due_date: toDate(task.dueDate), estimated_hours: toNumeric(task.estimatedHours), assignee: task.assignee, auto_sla: task.autoSla ?? true, attachments: task.attachments || [], custom_fields: task.customFields || {} };
+             // Fix: auto_sla: task.autoSla ?? true (task property is camelCase autoSla)
+             const payload = { title: task.title, description: task.description, client_id: toUUID(task.clientId), status: task.status, priority: task.priority, category: task.category, start_date: toDate(task.startDate), due_date: toDate(task.dueDate), estimated_hours: toNumeric(task.estimatedHours), assignee: task.assignee, auto_sla: task.autoSla ?? true, attachments: task.attachments || [], custom_fields: task.customFields || {}, external_id: task.externalId };
              const { data, error } = await supabase.from('tasks').insert([payload]).select().single();
              if (error) throw error;
-             return { ...data, clientId: data.client_id, startDate: data.start_date, dueDate: data.due_date, estimatedHours: data.estimated_hours, actualHours: data.actual_hours, autoSla: data.auto_sla, attachments: data.attachments || [], subtasks: [], comments: [] };
+             return { ...data, clientId: data.client_id, startDate: data.start_date, dueDate: data.due_date, estimatedHours: data.estimated_hours, actualHours: data.actual_hours, autoSla: data.auto_sla, attachments: data.attachments || [], subtasks: [], comments: [], externalId: data.external_id };
         }
         const tasks = LocalDB.get<Task>(DB_KEYS.TASKS, MOCK_TASKS);
         const newTask = { ...task, id: generateId(), createdAt: new Date().toISOString(), subtasks: [], comments: [], attachments: [], actualHours: 0 } as Task;
@@ -329,7 +329,8 @@ export const api = {
     },
     updateTask: async (task: Task): Promise<Task> => {
         if (isConfigured) {
-            const payload = { title: task.title, description: task.description, status: task.status, priority: task.priority, category: task.category, start_date: toDate(task.startDate), due_date: toDate(task.dueDate), estimated_hours: toNumeric(task.estimatedHours), actual_hours: toNumeric(task.actualHours), is_tracking_time: task.isTrackingTime, last_time_log_start: task.lastTimeLogStart, assignee: task.assignee, auto_sla: task.autoSla, attachments: task.attachments || [], custom_fields: task.customFields || {} };
+            // Fix: is_tracking_time: task.isTrackingTime and auto_sla: task.autoSla (Task properties are camelCase)
+            const payload = { title: task.title, description: task.description, status: task.status, priority: task.priority, category: task.category, start_date: toDate(task.startDate), due_date: toDate(task.dueDate), estimated_hours: toNumeric(task.estimatedHours), actual_hours: toNumeric(task.actualHours), is_tracking_time: task.isTrackingTime, last_time_log_start: task.lastTimeLogStart, assignee: task.assignee, auto_sla: task.autoSla, attachments: task.attachments || [], custom_fields: task.customFields || {}, external_id: task.externalId };
             const { error } = await supabase.from('tasks').update(payload).eq('id', task.id);
             if (error) throw error;
             return task;
@@ -350,7 +351,7 @@ export const api = {
     },
     createTasksBulk: async (tasksData: Partial<Task>[]) => {
         if (isConfigured) {
-             const payload = tasksData.map(t => ({ title: t.title, client_id: toUUID(t.clientId), status: t.status, priority: t.priority, auto_sla: t.autoSla ?? true }));
+             const payload = tasksData.map(t => ({ title: t.title, description: t.description, client_id: toUUID(t.clientId), status: t.status, priority: t.priority, auto_sla: t.autoSla ?? true, category: t.category, start_date: toDate(t.startDate), due_date: toDate(t.dueDate), estimated_hours: toNumeric(t.estimatedHours), assignee: t.assignee, external_id: t.externalId }));
              const { error } = await supabase.from('tasks').insert(payload);
              if (error) throw error;
              return;
@@ -371,7 +372,6 @@ export const api = {
     },
     createTransaction: async (tr: Partial<Transaction>): Promise<Transaction> => {
         if (isConfigured) {
-             // Fixed customFields mapping to use the correct Domain property name
              const payload = { date: tr.date, description: tr.description, category: tr.category, amount: toNumeric(tr.amount), type: tr.type, status: tr.status, frequency: tr.frequency, installments: toNumeric(tr.installments), client_id: toUUID(tr.clientId), partner_id: toUUID(tr.partnerId), custom_fields: tr.customFields || {} };
              const { data, error } = await supabase.from('transactions').insert([payload]).select().single();
              if (error) throw error;
@@ -553,13 +553,13 @@ export const api = {
         return { ...comment, id: generateId(), timestamp: new Date().toISOString() };
     },
     summarizeComments: async (comments: Comment[]): Promise<string> => {
-        if (!process.env.API_KEY) return "API Key não configurada para IA.";
+        if (!process.env.API_KEY) return "AI desativada: Variável API_KEY ausente.";
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const text = comments.map(c => `${c.author}: ${c.text}`).join('\n');
             const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: `Resuma a seguinte discussão de uma tarefa em tópicos breves:\n\n${text}` });
             return response.text || "Não foi possível gerar resumo.";
-        } catch (e) { return "Erro ao gerar resumo."; }
+        } catch (e) { return "Erro ao gerar resumo. Verifique faturamento da conta Google Cloud."; }
     },
 
     getCustomFields: async (): Promise<CustomFieldDefinition[]> => {
@@ -625,7 +625,10 @@ export const api = {
         LocalDB.set(DB_KEYS.PLAYBOOKS, playbooks.filter(p => p.id !== id));
     },
     generatePlaybookStructure: async (topic: string, clientName: string): Promise<PlaybookBlock[]> => {
-        if (!process.env.API_KEY) throw new Error("API Key ausente.");
+        if (!process.env.API_KEY || process.env.API_KEY.length < 5) {
+            throw new Error("Inteligência indisponível: Chave de API não configurada no ambiente (env: API_KEY).");
+        }
+        
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const prompt = `
             Act as a Senior Operations & Process Architect. 
@@ -660,6 +663,12 @@ export const api = {
                 }
                 return { ...b, id: generateId() };
             });
-        } catch (e) { throw new Error("Falha ao gerar estrutura com IA. Verifique se o prompt resultou em JSON válido."); }
+        } catch (e: any) { 
+            console.error("AI Error:", e);
+            if (e.message?.includes('429') || e.message?.includes('quota')) {
+                throw new Error("Cota da IA excedida. Tente novamente mais tarde ou verifique faturamento.");
+            }
+            throw new Error("Falha na comunicação com a IA. Verifique se a API Key é válida."); 
+        }
     }
 };

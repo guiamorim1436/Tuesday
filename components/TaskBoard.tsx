@@ -1,17 +1,21 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Filter, Plus, Clock, X, AlignLeft, CheckSquare, Search, Loader2, Calendar as CalendarIcon, Layout, List, StretchHorizontal, ChevronLeft, ChevronRight, MoreHorizontal, User, Zap, Timer, ToggleLeft, ToggleRight, Layers } from 'lucide-react';
+import { Filter, Plus, Clock, X, AlignLeft, CheckSquare, Search, Loader2, Calendar as CalendarIcon, Layout, List, StretchHorizontal, ChevronLeft, ChevronRight, MoreHorizontal, User, Zap, Timer, ToggleLeft, ToggleRight, Layers, CalendarRange } from 'lucide-react';
 import { TaskStatus, TaskPriority, Task, ServiceCategory, CustomFieldDefinition, Client } from '../types';
 import { api } from '../services/api';
 import { TaskDetailModal } from './TaskDetailModal';
 
 type ViewMode = 'kanban' | 'list' | 'timeline' | 'calendar' | 'gantt';
 
+// Declare Google script objects for TS
+declare const google: any;
+
 export const TaskBoard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Filters
   const [filterPriority, setFilterPriority] = useState<string>('all');
@@ -22,7 +26,6 @@ export const TaskBoard: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
-  const [currentDate, setCurrentDate] = useState(new Date()); 
 
   // Inputs
   const [newTaskData, setNewTaskData] = useState<Partial<Task>>({
@@ -59,6 +62,89 @@ export const TaskBoard: React.FC = () => {
       } finally {
           setIsLoading(false);
       }
+  };
+
+  const syncGoogleCalendar = () => {
+      // Logic for OAuth2 client (Google Identity Services)
+      // Note: In a real app, client_id would be in process.env.GOOGLE_CLIENT_ID
+      const CLIENT_ID = (window as any).process?.env?.GOOGLE_CLIENT_ID || '148810988636-placeholder.apps.googleusercontent.com';
+      
+      if (!CLIENT_ID.includes('apps.googleusercontent.com')) {
+          return alert("Erro: Google Client ID não configurado no ambiente.");
+      }
+
+      setIsSyncing(true);
+
+      const tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: 'https://www.googleapis.com/auth/calendar.readonly',
+          callback: async (response: any) => {
+              if (response.error !== undefined) {
+                  setIsSyncing(false);
+                  return;
+              }
+
+              try {
+                  const now = new Date();
+                  const weekFromNow = new Date();
+                  weekFromNow.setDate(now.getDate() + 7);
+
+                  const res = await fetch(
+                      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now.toISOString()}&timeMax=${weekFromNow.toISOString()}&singleEvents=true&orderBy=startTime`,
+                      {
+                          headers: { Authorization: `Bearer ${response.access_token}` }
+                      }
+                  );
+                  const data = await res.json();
+                  
+                  if (!data.items) {
+                      throw new Error("Nenhum evento encontrado ou erro na API do Google.");
+                  }
+
+                  const internalTasks = await api.getTasks();
+                  const existingExternalIds = new Set(internalTasks.map(t => t.externalId).filter(Boolean));
+
+                  const tasksToCreate: Partial<Task>[] = data.items
+                      .filter((event: any) => event.status !== 'cancelled' && !existingExternalIds.has(event.id))
+                      .map((event: any) => {
+                          const start = event.start.dateTime || event.start.date;
+                          const end = event.end.dateTime || event.end.date;
+                          const diff = (new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60);
+
+                          return {
+                              title: `[CAL] ${event.summary || '(Sem Título)'}`,
+                              description: event.description || 'Evento importado do Google Calendar.',
+                              status: TaskStatus.BACKLOG,
+                              priority: TaskPriority.MEDIUM,
+                              category: 'Reunião',
+                              startDate: start.split('T')[0],
+                              dueDate: end.split('T')[0],
+                              estimatedHours: Math.max(0.5, Number(diff.toFixed(1))),
+                              autoSla: false,
+                              assignee: 'Sincronizado',
+                              externalId: event.id,
+                              clientId: clients[0]?.id // Defaulting to first client, user can adjust later
+                          };
+                      });
+
+                  if (tasksToCreate.length > 0) {
+                      await api.createTasksBulk(tasksToCreate);
+                      alert(`${tasksToCreate.length} novos eventos sincronizados com sucesso.`);
+                      loadData();
+                  } else {
+                      alert("Nenhum novo evento para sincronizar.");
+                  }
+
+              } catch (e: any) {
+                  console.error(e);
+                  alert("Erro ao buscar eventos: " + e.message);
+              } finally {
+                  setIsSyncing(false);
+              }
+          },
+      });
+
+      tokenClient.requestAccessToken({ prompt: 'consent' });
   };
 
   const filteredTasks = useMemo(() => {
@@ -145,7 +231,6 @@ export const TaskBoard: React.FC = () => {
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Sem cliente';
 
-  // Kanban view logic...
   const renderKanban = () => {
       const columns = [
            { id: TaskStatus.BACKLOG, title: 'Backlog', color: 'bg-slate-400' },
@@ -187,7 +272,10 @@ export const TaskBoard: React.FC = () => {
                            </div>
                        )}
                        <div className="flex justify-between items-start mb-2 pr-12">
-                           <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 truncate max-w-[120px]">{getClientName(task.clientId)}</span>
+                           <div className="flex flex-col gap-1">
+                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{task.category || 'Geral'}</span>
+                               <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 truncate max-w-[120px]">{getClientName(task.clientId)}</span>
+                           </div>
                        </div>
                        <h4 className="text-sm font-semibold text-slate-800 mb-2 leading-snug group-hover:text-indigo-600 transition-colors">{task.title}</h4>
                        
@@ -232,6 +320,7 @@ export const TaskBoard: React.FC = () => {
                           <td className="px-6 py-4">
                               <span className="text-sm font-semibold text-slate-800 group-hover:text-indigo-600">{t.title}</span>
                               {t.isTrackingTime && <span className="ml-2 inline-flex items-center text-[10px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded border border-rose-100 animate-pulse"><span className="w-1.5 h-1.5 bg-rose-500 rounded-full mr-1"></span>Gravando</span>}
+                              {t.externalId && <span className="ml-2 inline-flex items-center text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100"><CalendarRange size={10} className="mr-1"/> Agenda</span>}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600">{getClientName(t.clientId)}</td>
                           <td className="px-6 py-4">
@@ -257,27 +346,26 @@ export const TaskBoard: React.FC = () => {
       </div>
   );
 
-  const renderTimeline = () => {
-    // Standard Timeline logic...
-    return <div className="p-4 text-slate-500 italic">Timeline View...</div>;
-  };
-
-  const renderCalendar = () => {
-    // Standard Calendar logic...
-    return <div className="p-4 text-slate-500 italic">Calendar View...</div>;
-  };
-
-  const renderGantt = () => {
-    // Standard Gantt logic...
-    return <div className="p-4 text-slate-500 italic">Gantt View...</div>;
-  };
+  const renderTimeline = () => <div className="p-12 text-center text-slate-400 bg-white rounded-3xl border border-slate-200">Cronograma detalhado em desenvolvimento...</div>;
+  const renderCalendar = () => <div className="p-12 text-center text-slate-400 bg-white rounded-3xl border border-slate-200">Visualização de calendário mensal em desenvolvimento...</div>;
+  const renderGantt = () => <div className="p-12 text-center text-slate-400 bg-white rounded-3xl border border-slate-200">Gráfico de Gantt em desenvolvimento...</div>;
 
   return (
     <div className="flex flex-col h-full bg-transparent relative">
       <div className="bg-white/70 backdrop-blur-xl border-b border-white/50 px-6 py-5 flex flex-col gap-4 sticky top-0 z-20 shadow-sm">
         <div className="flex justify-between items-center">
             <div><h2 className="text-2xl font-bold text-slate-900 tracking-tight">Central de Operações</h2><p className="text-sm text-slate-600 font-medium">Gestão de entregáveis e SLA</p></div>
-            <button onClick={() => setIsNewTaskModalOpen(true)} className="flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"><Plus size={18} /><span>Nova Tarefa</span></button>
+            <div className="flex space-x-2">
+                <button 
+                    onClick={syncGoogleCalendar} 
+                    disabled={isSyncing}
+                    className="flex items-center space-x-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm disabled:opacity-50"
+                >
+                    {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <CalendarRange size={18} className="text-indigo-600"/>}
+                    <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Agenda'}</span>
+                </button>
+                <button onClick={() => setIsNewTaskModalOpen(true)} className="flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"><Plus size={18} /><span>Nova Tarefa</span></button>
+            </div>
         </div>
         
         <div className="flex flex-wrap gap-3 items-center">

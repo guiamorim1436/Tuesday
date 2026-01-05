@@ -153,7 +153,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
 
   const toggleSubtask = async (subId: string, currentStatus: boolean) => {
       const newStatus = !currentStatus;
-      setEditedTask(prev => ({ ...prev, subtasks: prev.subtasks.map(s => { s.id === subId ? { ...s, completed: newStatus } : s }) }));
+      // Fix: Removed curly braces in map to ensure implicit return of the object
+      setEditedTask(prev => ({ ...prev, subtasks: prev.subtasks.map(s => s.id === subId ? { ...s, completed: newStatus } : s) }));
       await api.toggleSubtask(subId, newStatus);
   };
 

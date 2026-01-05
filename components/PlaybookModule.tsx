@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Plus, Loader2, Sparkles, Layout, Edit3, Eye, ArrowLeft, Save, Trash2, Printer, Move, ChevronDown, ChevronUp, Image as ImageIcon, List, HelpCircle, AlertTriangle, Type, CheckCircle, X, Wand2, Search, FileText, LayoutPanelTop, Archive, BookMarked } from 'lucide-react';
+import { BookOpen, Plus, Loader2, Sparkles, Layout, Edit3, Eye, ArrowLeft, Save, Trash2, Printer, Move, ChevronDown, ChevronUp, Image as ImageIcon, List, HelpCircle, AlertTriangle, Type, CheckCircle, X, Wand2, Search, FileText, LayoutPanelTop, Archive, BookMarked, BrainCircuit, Info } from 'lucide-react';
 import { api } from '../services/api';
 import { Client, Playbook, PlaybookBlock } from '../types';
 
@@ -18,10 +18,17 @@ export const PlaybookModule: React.FC = () => {
     const [selectedClientId, setSelectedClientId] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [quickAiCommand, setQuickAiCommand] = useState('');
+    const [aiAvailable, setAiAvailable] = useState(false);
 
     useEffect(() => {
         loadData();
+        checkAiStatus();
     }, []);
+
+    const checkAiStatus = () => {
+        const hasKey = !!(process.env.API_KEY && process.env.API_KEY.length > 5);
+        setAiAvailable(hasKey);
+    };
 
     const loadData = async () => {
         setIsLoading(true);
@@ -45,9 +52,12 @@ export const PlaybookModule: React.FC = () => {
         
         try {
             let initialBlocks: PlaybookBlock[] = [];
-            if (quickAiCommand.trim()) {
+            // Só tenta gerar IA se houver comando e a IA estiver ativa
+            if (quickAiCommand.trim() && aiAvailable) {
                 const clientName = clients.find(c => c.id === selectedClientId)?.name || "Geral";
                 initialBlocks = await api.generatePlaybookStructure(quickAiCommand, clientName);
+            } else if (quickAiCommand.trim() && !aiAvailable) {
+                alert("Aviso: O comando de IA foi ignorado pois a chave de API não foi detectada. O documento será criado vazio.");
             }
 
             const newPlaybookObj: Partial<Playbook> = {
@@ -148,20 +158,6 @@ export const PlaybookModule: React.FC = () => {
                                 </div>
                             );
                         })}
-                        {filteredPlaybooks.length === 0 && (
-                            <div className="col-span-full py-32 text-center text-slate-400 bg-white rounded-[40px] border-2 border-dashed border-slate-200">
-                                <div className="max-w-xs mx-auto">
-                                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                                        <BookOpen size={40} className="opacity-20"/>
-                                    </div>
-                                    <h4 className="text-xl font-bold text-slate-900 mb-2">Wiki Vazia</h4>
-                                    <p className="text-sm text-slate-500 mb-8">Nenhum processo foi catalogado ainda. Use a IA para começar a documentar agora.</p>
-                                    <button onClick={openCreateModal} className="text-indigo-600 font-bold text-sm hover:underline flex items-center justify-center mx-auto">
-                                        <Sparkles size={16} className="mr-2"/> Documentar Primeiro Processo
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}
@@ -173,6 +169,7 @@ export const PlaybookModule: React.FC = () => {
                     onSave={handleSaveBlockUpdate}
                     onPreview={() => setView('viewer')}
                     clients={clients}
+                    aiAvailable={aiAvailable}
                 />
             )}
 
@@ -195,13 +192,13 @@ export const PlaybookModule: React.FC = () => {
                                     <LayoutPanelTop size={24} className="mr-3 text-indigo-600"/>
                                     Novo Documento Wiki
                                 </h3>
-                                <p className="text-sm text-slate-500 font-medium mt-1">Crie manuais de processos internos guiados por IA.</p>
+                                <p className="text-sm text-slate-500 font-medium mt-1">Documente processos manualmente ou via IA.</p>
                             </div>
                             <button onClick={() => setIsCreateModalOpen(false)} className="p-2.5 hover:bg-white rounded-2xl transition-colors border border-transparent hover:border-slate-200"><X size={24} className="text-slate-400"/></button>
                         </div>
                         <div className="p-10 space-y-8">
                             <div className="space-y-2">
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Título do Documento</label>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Título do Documento <span className="text-rose-500">*</span></label>
                                 <input 
                                     className="w-full px-6 py-4 bg-white border border-slate-200 rounded-[20px] text-lg text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold placeholder-slate-300" 
                                     placeholder="Ex: Guia de Migração para API Oficial"
@@ -211,23 +208,30 @@ export const PlaybookModule: React.FC = () => {
                                 />
                             </div>
 
-                            <div className="bg-indigo-600 rounded-[24px] p-8 shadow-xl shadow-indigo-500/20 relative overflow-hidden">
+                            <div className={`rounded-[24px] p-8 shadow-xl relative overflow-hidden transition-all duration-500 ${aiAvailable ? 'bg-indigo-600 shadow-indigo-500/20' : 'bg-slate-100 shadow-none grayscale'}`}>
                                 <div className="absolute top-0 right-0 p-4 opacity-10">
                                     <Sparkles size={80} className="text-white"/>
                                 </div>
-                                <label className="flex items-center text-sm font-bold text-indigo-100 mb-4 relative z-10">
+                                <label className={`flex items-center text-sm font-bold mb-4 relative z-10 ${aiAvailable ? 'text-indigo-100' : 'text-slate-500'}`}>
                                     <Wand2 size={18} className="mr-2"/> 
-                                    Comando Operacional para a IA
+                                    Comando para IA (Opcional)
                                 </label>
                                 <textarea 
-                                    className="w-full h-32 px-6 py-4 bg-white/10 backdrop-blur border border-white/20 rounded-[20px] text-base text-white placeholder-indigo-200/60 focus:ring-4 focus:ring-white/10 outline-none transition-all resize-none relative z-10"
-                                    placeholder="Descreva o processo brevemente. Ex: 'Quando um cliente migrar para API oficial, orientar uso de cartão pré-pago para previsibilidade do orçamento e explicar o setup técnico inicial.'"
+                                    className={`w-full h-24 px-6 py-4 backdrop-blur border rounded-[20px] text-base outline-none transition-all resize-none relative z-10 ${
+                                        aiAvailable 
+                                        ? 'bg-white/10 border-white/20 text-white placeholder-indigo-200/60 focus:ring-4 focus:ring-white/10' 
+                                        : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                                    }`}
+                                    placeholder={aiAvailable ? "Descreva o processo... (Ex: 'Mapeie o fluxo de cobrança mensal')" : "IA Desativada. Chave de API não detectada no ambiente."}
                                     value={quickAiCommand}
                                     onChange={e => setQuickAiCommand(e.target.value)}
+                                    disabled={!aiAvailable}
                                 />
-                                <p className="text-[11px] text-indigo-100/70 mt-4 font-semibold flex items-center relative z-10">
-                                    <CheckCircle size={14} className="mr-2"/> A IA arquitetará o manual completo (objetivo, passo a passo e alertas).
-                                </p>
+                                {aiAvailable && (
+                                    <p className="text-[11px] text-indigo-100/70 mt-4 font-semibold flex items-center relative z-10">
+                                        <Info size={14} className="mr-2"/> Se preenchido, a IA redigirá os blocos iniciais automaticamente.
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -247,9 +251,9 @@ export const PlaybookModule: React.FC = () => {
                             <button 
                                 onClick={handleCreate} 
                                 disabled={isCreating || !newPlaybookTitle}
-                                className="px-10 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-600/30 transition-all flex items-center disabled:opacity-50 disabled:scale-100 active:scale-95"
+                                className="px-10 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-600/30 transition-all flex items-center disabled:opacity-50"
                             >
-                                {isCreating ? <Loader2 className="animate-spin mr-2"/> : <Sparkles size={18} className="mr-2"/>} Criar Manual
+                                {isCreating ? <Loader2 className="animate-spin mr-2"/> : (quickAiCommand.trim() && aiAvailable ? <><Sparkles size={18} className="mr-2"/> Redigir com IA</> : <><CheckCircle size={18} className="mr-2"/> Criar Manual</>)}
                             </button>
                         </div>
                     </div>
@@ -267,7 +271,8 @@ const PlaybookBuilder: React.FC<{
     onSave: (p: Playbook) => void;
     onPreview: () => void;
     clients: Client[];
-}> = ({ playbook, onBack, onSave, onPreview, clients }) => {
+    aiAvailable: boolean;
+}> = ({ playbook, onBack, onSave, onPreview, clients, aiAvailable }) => {
     const [aiPrompt, setAiPrompt] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     
@@ -334,42 +339,39 @@ const PlaybookBuilder: React.FC<{
                 <div className="max-w-4xl mx-auto space-y-8 pb-40">
                     
                     {/* IA Inline Assistant */}
-                    <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-[32px] p-8 shadow-2xl shadow-indigo-500/20 flex flex-col md:flex-row items-center gap-6 relative overflow-hidden group">
-                        <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000"></div>
-                        <div className="bg-white/10 backdrop-blur-xl p-4 rounded-2xl text-white border border-white/20 relative z-10">
-                            <Sparkles size={32}/>
-                        </div>
-                        <div className="flex-1 relative z-10">
-                            <h4 className="font-bold text-white text-lg tracking-tight">Expanda seu Manual com IA</h4>
-                            <p className="text-indigo-100/70 text-sm font-medium mt-1">Dê novos comandos para a IA redigir seções adicionais.</p>
-                            <div className="flex mt-5 gap-3">
-                                <input 
-                                    className="flex-1 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-5 py-3 text-sm text-white outline-none focus:ring-4 focus:ring-white/10 placeholder-indigo-200/50 font-medium" 
-                                    placeholder="Ex: 'Adicione uma seção sobre custos por mensagem na API'..." 
-                                    value={aiPrompt} 
-                                    onChange={e => setAiPrompt(e.target.value)} 
-                                    onKeyDown={e => e.key === 'Enter' && handleGenerateAI()}
-                                />
-                                <button onClick={handleGenerateAI} disabled={isGenerating || !aiPrompt} className="bg-white text-indigo-700 px-6 py-3 rounded-2xl text-xs font-bold transition-all hover:bg-indigo-50 disabled:opacity-50 shadow-lg active:scale-95">
-                                    {isGenerating ? <Loader2 size={16} className="animate-spin"/> : 'Adicionar Blocos'}
-                                </button>
+                    {aiAvailable && (
+                        <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-[32px] p-8 shadow-2xl shadow-indigo-500/20 flex flex-col md:flex-row items-center gap-6 relative overflow-hidden group">
+                            <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000"></div>
+                            <div className="bg-white/10 backdrop-blur-xl p-4 rounded-2xl text-white border border-white/20 relative z-10">
+                                <Sparkles size={32}/>
+                            </div>
+                            <div className="flex-1 relative z-10">
+                                <h4 className="font-bold text-white text-lg tracking-tight">Expanda seu Manual com IA</h4>
+                                <p className="text-indigo-100/70 text-sm font-medium mt-1">Peça novos tópicos ou explicações técnicas para a IA.</p>
+                                <div className="flex mt-5 gap-3">
+                                    <input 
+                                        className="flex-1 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-5 py-3 text-sm text-white outline-none focus:ring-4 focus:ring-white/10 placeholder-indigo-200/50 font-medium" 
+                                        placeholder="Ex: 'Adicione uma seção sobre custos por mensagem na API'..." 
+                                        value={aiPrompt} 
+                                        onChange={e => setAiPrompt(e.target.value)} 
+                                        onKeyDown={e => e.key === 'Enter' && handleGenerateAI()}
+                                    />
+                                    <button onClick={handleGenerateAI} disabled={isGenerating || !aiPrompt} className="bg-white text-indigo-700 px-6 py-3 rounded-2xl text-xs font-bold transition-all hover:bg-indigo-50 disabled:opacity-50 shadow-lg">
+                                        {isGenerating ? <Loader2 size={16} className="animate-spin"/> : 'Gerar Seção'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
                     {blocks.map((block, idx) => (
-                        <div key={block.id || idx} className="group relative bg-white rounded-[32px] shadow-sm border border-slate-200/60 p-2 transition-all hover:shadow-xl hover:shadow-slate-200/50">
+                        <div key={block.id || idx} className="group relative bg-white rounded-[32px] shadow-sm border border-slate-200/60 p-2 transition-all hover:shadow-xl">
                             <div className="absolute -right-4 top-1/2 -translate-y-1/2 flex flex-col space-y-2 opacity-0 group-hover:opacity-100 transition-opacity translate-x-4 group-hover:translate-x-0">
                                 <button onClick={() => moveBlock(idx, -1)} className="p-2.5 bg-white shadow-lg border border-slate-100 rounded-xl text-slate-500 hover:text-indigo-600 hover:scale-110 transition-all"><ChevronUp size={18}/></button>
                                 <button onClick={() => moveBlock(idx, 1)} className="p-2.5 bg-white shadow-lg border border-slate-100 rounded-xl text-slate-500 hover:text-indigo-600 hover:scale-110 transition-all"><ChevronDown size={18}/></button>
                                 <button onClick={() => deleteBlock(idx)} className="p-2.5 bg-white shadow-lg border border-slate-100 rounded-xl text-rose-500 hover:bg-rose-50 hover:scale-110 transition-all"><Trash2 size={18}/></button>
                             </div>
                             <div className="p-6">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100/50">
-                                        SEÇÃO {idx + 1}: {block.type}
-                                    </div>
-                                </div>
                                 <BlockEditor block={block} onChange={(newBlock) => {
                                     const newBlocks = [...blocks];
                                     newBlocks[idx] = newBlock;
@@ -380,10 +382,10 @@ const PlaybookBuilder: React.FC<{
                     ))}
 
                     <div className="flex flex-wrap justify-center gap-4 pt-12">
-                        <button onClick={() => addBlock('text')} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:border-indigo-600 hover:text-indigo-600 text-sm font-bold transition-all shadow-sm hover:shadow-md">+ Texto Contextual</button>
-                        <button onClick={() => addBlock('steps')} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:border-indigo-600 hover:text-indigo-600 text-sm font-bold transition-all shadow-sm hover:shadow-md">+ Checklist de Ação</button>
-                        <button onClick={() => addBlock('alert')} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:border-indigo-600 hover:text-indigo-600 text-sm font-bold transition-all shadow-sm hover:shadow-md">+ Aviso de Atenção</button>
-                        <button onClick={() => addBlock('faq')} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:border-indigo-600 hover:text-indigo-600 text-sm font-bold transition-all shadow-sm hover:shadow-md">+ FAQ (Dúvidas)</button>
+                        <button onClick={() => addBlock('text')} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:border-indigo-600 hover:text-indigo-600 text-sm font-bold transition-all shadow-sm">+ Texto Contextual</button>
+                        <button onClick={() => addBlock('steps')} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:border-indigo-600 hover:text-indigo-600 text-sm font-bold transition-all shadow-sm">+ Checklist de Ação</button>
+                        <button onClick={() => addBlock('alert')} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:border-indigo-600 hover:text-indigo-600 text-sm font-bold transition-all shadow-sm">+ Aviso de Atenção</button>
+                        <button onClick={() => addBlock('faq')} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:border-indigo-600 hover:text-indigo-600 text-sm font-bold transition-all shadow-sm">+ FAQ (Dúvidas)</button>
                     </div>
                 </div>
             </div>

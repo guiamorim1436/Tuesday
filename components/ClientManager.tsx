@@ -315,7 +315,8 @@ export const ClientManager: React.FC = () => {
                         <div className="ml-4">
                           <div className="flex items-center">
                               <span className="text-sm font-bold text-slate-800">{client.name}</span>
-                              {client.hasImplementation && <Rocket size={14} className="ml-2 text-indigo-500" title="Possui Implementação"/>}
+                              {/* Fix: removed direct 'title' prop from Lucide icon to avoid type error */}
+                              {client.hasImplementation && <Rocket size={14} className="ml-2 text-indigo-500"/>}
                           </div>
                           {partner && <div className="text-xs text-slate-500">Parceiro: <span className="font-medium text-slate-700">{partner.name}</span></div>}
                         </div>

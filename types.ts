@@ -106,6 +106,7 @@ export interface Task {
   lastTimeLogStart?: number; 
   
   requestedBy?: string; 
+  externalId?: string; // New: To link with Google Calendar Events
 }
 
 export interface FinanceMetric {
