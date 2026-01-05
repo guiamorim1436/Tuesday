@@ -135,7 +135,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, onClose,
                     onChange={e => setEditedTask({...editedTask, title: e.target.value})}
                 />
                 <div className="flex items-center flex-wrap gap-3 mt-3">
-                    <select className="text-[10px] font-bold uppercase px-2 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 outline-none" value={editedTask.status} onChange={e => setEditedTask({...editedTask, status: e.target.value})}>
+                    {/* Fix: casting value to TaskStatus to resolve type mismatch */}
+                    <select className="text-[10px] font-bold uppercase px-2 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 outline-none" value={editedTask.status} onChange={e => setEditedTask({...editedTask, status: e.target.value as TaskStatus})}>
                         {Object.values(TaskStatus).map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <div className="flex items-center text-[10px] font-bold text-slate-600 uppercase bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">

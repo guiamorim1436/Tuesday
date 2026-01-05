@@ -75,10 +75,11 @@ export const UserManagement: React.FC = () => {
     };
 
     const togglePermission = (key: string) => {
-        const currentPerms = currentUser.permissions || {};
+        // Fix: provide a complete default permissions object to satisfy the type requirement
+        const currentPerms = currentUser.permissions || { canDelete: false, viewFinance: false, manageUsers: false };
         setCurrentUser({
             ...currentUser,
-            permissions: { ...currentPerms, [key]: !currentPerms[key] }
+            permissions: { ...currentPerms, [key as keyof typeof currentPerms]: !currentPerms[key as keyof typeof currentPerms] }
         });
     };
 
