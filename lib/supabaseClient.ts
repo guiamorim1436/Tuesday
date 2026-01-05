@@ -1,25 +1,13 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 const getEnv = (key: string) => {
-    try {
-        // Fix: Accessing env through any cast to avoid TS error on ImportMeta
-        const meta = import.meta as any;
-        if (meta && meta.env && meta.env[key]) {
-            return meta.env[key];
-        }
-    } catch (e) {}
-    try {
-        if (typeof process !== 'undefined' && process.env && process.env[key]) {
-            return process.env[key];
-        }
-    } catch (e) {}
-    return '';
+    // Prioriza o padrão do Vite, com fallback para process em ambientes de teste
+    return (import.meta as any).env?.[key] || (process as any).env?.[key] || '';
 };
 
 const getStoredConfig = () => {
     try {
-        // 1. PRIORIDADE TOTAL: LocalStorage (Suas chaves salvas)
+        // 1. PRIORIDADE: Configuração manual persistida no navegador (Settings do Usuário)
         if (typeof window !== 'undefined') {
             const localUrl = localStorage.getItem('tuesday_supabase_url');
             const localKey = localStorage.getItem('tuesday_supabase_key');
@@ -28,14 +16,15 @@ const getStoredConfig = () => {
             }
         }
 
-        // 2. Variáveis de Ambiente
+        // 2. FALLBACK: Variáveis de ambiente injetadas pelo Host (Vercel)
         const envUrl = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL');
         const envKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY');
+        
         if (envUrl && envKey && envUrl.startsWith('http')) {
             return { url: envUrl, key: envKey };
         }
     } catch (e) {
-        console.error("Erro ao configurar Supabase:", e);
+        console.error("Erro na inicialização do Supabase:", e);
     }
     return { url: '', key: '' };
 };
@@ -44,8 +33,7 @@ const config = getStoredConfig();
 
 export const isConfigured = !!(config.url && config.key);
 
-// Se não houver configuração, criamos um cliente placeholder para não quebrar a importação, 
-// mas a flag isConfigured dirá à API para usar Mocks.
+// Inicialização segura do cliente
 export const supabase = createClient(
     config.url || 'https://placeholder-tuesday.supabase.co', 
     config.key || 'placeholder-key',

@@ -9,13 +9,8 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
-      // Injeção prioritária do objeto process para evitar falhas em libs de terceiros
-      window.process = { 
-        env: { 
-          NODE_ENV: 'production',
-          API_KEY: '' 
-        } 
-      };
+      // Injeção mínima para compatibilidade com SDKs que ainda buscam global.process
+      window.process = window.process || { env: { NODE_ENV: 'production' } };
       window.global = window;
     </script>
     <style>
