@@ -1,4 +1,5 @@
 
+
 import { Client, ClientStatus, Partner, Task, TaskPriority, TaskStatus, FinanceMetric, CustomFieldDefinition, Transaction, ServiceCategory, SLATier, WorkConfig, User, CatalogItem, Proposal, Lead, CRMStage, TaskTemplateGroup } from './types';
 
 // Custom Fields Configuration
@@ -38,11 +39,13 @@ export const DEFAULT_SLA_TIERS: SLATier[] = [
 ];
 
 // Default Work Config
+// Fixed: Added missing maxMeetingsPerDay property to satisfy WorkConfig interface
 export const DEFAULT_WORK_CONFIG: WorkConfig = {
   workDays: [1, 2, 3, 4, 5], // Mon-Fri
   workHoursStart: "09:00",
   workHoursEnd: "18:00",
   maxTasksPerDay: 4,
+  maxMeetingsPerDay: 4,
   maxCriticalPerDay: 1,
   maxHighPerDay: 2,
   slaOffsetCritical: 0,
@@ -131,7 +134,9 @@ export const MOCK_TASKS: Task[] = [
     createdAt: '2023-11-01',
     estimatedHours: 8, 
     actualHours: 14.5, 
-    assignee: 'Carlos',
+    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
+    assignees: ['Carlos'],
+    subscribers: [],
     participants: ['Ana'],
     watchers: ['Admin User'],
     category: 'Vendas',
@@ -158,7 +163,9 @@ export const MOCK_TASKS: Task[] = [
     createdAt: '2023-10-25',
     estimatedHours: 20, 
     actualHours: 45, 
-    assignee: 'Ana',
+    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
+    assignees: ['Ana'],
+    subscribers: [],
     participants: ['Carlos', 'DevTeam'],
     watchers: [],
     category: 'Automacao',
@@ -180,7 +187,9 @@ export const MOCK_TASKS: Task[] = [
     createdAt: '2023-10-20',
     estimatedHours: 6, 
     actualHours: 6, 
-    assignee: 'Carlos',
+    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
+    assignees: ['Carlos'],
+    subscribers: [],
     participants: [],
     watchers: [],
     category: 'CRM',
@@ -202,7 +211,9 @@ export const MOCK_TASKS: Task[] = [
     createdAt: '2023-11-05',
     estimatedHours: 1, 
     actualHours: 2.5, 
-    assignee: 'Ana', 
+    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
+    assignees: ['Ana'], 
+    subscribers: [],
     participants: ['Admin User'],
     watchers: [],
     category: 'Reunião',
@@ -224,7 +235,9 @@ export const MOCK_TASKS: Task[] = [
     createdAt: '2023-11-01',
     estimatedHours: 2, 
     actualHours: 0, 
-    assignee: 'Carlos',
+    // Fix: Changed 'assignee' to 'assignees' array to match Task interface
+    assignees: ['Carlos'],
+    subscribers: [],
     participants: [],
     watchers: [], 
     category: 'Suporte', // Non-billable
