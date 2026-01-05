@@ -13,14 +13,14 @@ interface ErrorBoundaryState {
 
 // Ensure ErrorBoundary correctly extends React.Component with props and state types
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Redundant state declaration removed to avoid shadowing base class properties
+  // Explicitly declaring state to ensure TS recognizes it on the instance
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null,
+  };
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-    };
   }
 
   public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
