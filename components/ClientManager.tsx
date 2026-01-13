@@ -1,11 +1,7 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, CheckCircle, XCircle, PauseCircle, Clock, Plus, Edit2, Trash2, X, Save, DollarSign, Upload, CheckSquare, Square, Filter, Loader2, Download, Layers, Calendar, Rocket, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Search, CheckCircle, XCircle, PauseCircle, Clock, Plus, Edit2, Trash2, X, Save, DollarSign, Upload, CheckSquare, Square, Filter, Loader2, Download, Layers, Calendar, Rocket, ToggleLeft, ToggleRight, Briefcase } from 'lucide-react';
 import { ClientStatus, Client, Partner, SLATier, TaskTemplateGroup, TaskStatus, Task } from '../types';
 import { api } from '../services/api';
-import { DEFAULT_TASK_TEMPLATES } from '../constants';
-import { exportToCSV } from '../services/csvHelper';
-import { CSVImporter } from './CSVImporter';
 import { ClientDetailModal } from './ClientDetailModal';
 
 export const ClientManager: React.FC = () => {
@@ -13,36 +9,62 @@ export const ClientManager: React.FC = () => {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'clients' | 'partners'>('clients');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPartner, setFilterPartner] = useState<string>('all');
   const [slaTiers, setSlaTiers] = useState<SLATier[]>([]);
   
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedPartner, setSelectedPartner] = useState<Partial<Partner> | null>(null);
+  const [isPartnerModalOpen, setIsPartnerModalOpen] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
       setIsLoading(true);
       try {
-          const [c, p, slas] = await Promise.all([
-              api.getClients(),
-              api.getPartners(),
-              api.getSLATiers()
-          ]);
+          const [c, p, slas] = await Promise.all([ api.getClients(), api.getPartners(), api.getSLATiers() ]);
           setClients(c);
           setPartners(p);
           setSlaTiers(slas);
-      } catch (e: any) {
-          console.error("Failed to load data", e?.message || e);
-      } finally {
-          setIsLoading(false);
-      }
+      } finally { setIsLoading(false); }
+  };
+
+  const handleOpenClient = (client?: Client) => {
+    if (client) {
+      setSelectedClient(client);
+    } else {
+      setSelectedClient({ 
+          id: Math.random().toString(), name: 'Novo Cliente', status: ClientStatus.ONBOARDING, 
+          slaTierId: slaTiers[0]?.id || '', healthScore: 100, hoursUsedMonth: 0, 
+          onboardingDate: new Date().toISOString().split('T')[0], billingDay: 1, 
+          hasImplementation: true, customFields: {}, comments: [], attachments: []
+      });
+    }
+  };
+
+  const handleOpenPartner = (partner?: Partner) => {
+    if (partner) {
+      setSelectedPartner({ ...partner });
+    } else {
+      setSelectedPartner({ name: '', implementationDays: 30, costPerSeat: 0, implementationFee: 0 });
+    }
+    setIsPartnerModalOpen(true);
+  };
+
+  const handleSavePartner = async () => {
+      if (!selectedPartner?.name) return;
+      try {
+          if (selectedPartner.id) {
+              const updated = await api.updatePartner(selectedPartner as Partner);
+              setPartners(partners.map(p => p.id === updated.id ? updated : p));
+          } else {
+              const created = await api.createPartner(selectedPartner);
+              setPartners([...partners, created]);
+          }
+          setIsPartnerModalOpen(false);
+          setSelectedPartner(null);
+      } catch (e) { alert("Erro ao salvar parceiro."); }
   };
 
   const filteredClients = clients.filter(c => {
@@ -53,29 +75,6 @@ export const ClientManager: React.FC = () => {
   });
 
   const filteredPartners = partners.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-  const handleOpenClient = (client?: Client) => {
-    if (client) {
-      setSelectedClient(client);
-    } else {
-      const defaultSLA = slaTiers[0]?.id || '';
-      const newClient: Client = { 
-          id: Math.random().toString(),
-          name: 'Novo Cliente',
-          status: ClientStatus.ONBOARDING, 
-          slaTierId: defaultSLA, 
-          healthScore: 100, 
-          hoursUsedMonth: 0, 
-          onboardingDate: new Date().toISOString().split('T')[0], 
-          billingDay: 1, 
-          hasImplementation: true,
-          customFields: {},
-          comments: [],
-          attachments: []
-      };
-      setSelectedClient(newClient);
-    }
-  };
 
   const getStatusBadge = (status: ClientStatus) => {
     switch (status) {
@@ -94,8 +93,9 @@ export const ClientManager: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Relacionamento</h2>
           <div className="flex space-x-2">
-            <button onClick={() => setIsImporterOpen(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center transition-all shadow-sm"><Upload size={16} className="mr-2"/> Importar</button>
-            <button onClick={() => activeTab === 'clients' ? handleOpenClient() : null} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md flex items-center transform active:scale-95"><Plus size={18} className="mr-2"/>{activeTab === 'clients' ? 'Novo Cliente' : 'Novo Parceiro'}</button>
+            <button onClick={() => activeTab === 'clients' ? handleOpenClient() : handleOpenPartner()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md flex items-center transform active:scale-95">
+                <Plus size={18} className="mr-2"/>{activeTab === 'clients' ? 'Novo Cliente' : 'Novo Parceiro'}
+            </button>
           </div>
         </div>
 
@@ -123,7 +123,6 @@ export const ClientManager: React.FC = () => {
                 {filteredClients.map((client) => {
                    const sla = slaTiers.find(s => s.id === client.slaTierId);
                    const hoursPercent = sla ? Math.min((client.hoursUsedMonth / sla.includedHours) * 100, 100) : 0;
-
                    return (
                   <tr key={client.id} className="hover:bg-slate-50 transition-colors group cursor-pointer" onClick={() => handleOpenClient(client)}>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -133,20 +132,10 @@ export const ClientManager: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(client.status)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                       <span className={`text-xs font-black ${client.healthScore > 80 ? 'text-emerald-500' : 'text-amber-500'}`}>{client.healthScore}%</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="w-32">
-                           <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                               <div className={`h-full rounded-full transition-all duration-500 ${hoursPercent > 90 ? 'bg-rose-500' : 'bg-indigo-500'}`} style={{ width: `${hoursPercent}%` }}></div>
-                           </div>
-                        </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                       <span className="font-bold text-slate-800">{sla?.name || 'N/A'}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <td className="px-6 py-4 whitespace-nowrap"><span className={`text-xs font-black ${client.healthScore > 80 ? 'text-emerald-500' : 'text-amber-500'}`}>{client.healthScore}%</span></td>
+                    <td className="px-6 py-4 whitespace-nowrap"><div className="w-32"><div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden"><div className={`h-full rounded-full transition-all duration-500 ${hoursPercent > 90 ? 'bg-rose-500' : 'bg-indigo-500'}`} style={{ width: `${hoursPercent}%` }}></div></div></div></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500"><span className="font-bold text-slate-800">{sla?.name || 'N/A'}</span></td>
+                    <td className="px-6 py-4 text-right">
                       <div className="flex justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={(e) => { e.stopPropagation(); handleOpenClient(client); }} className="text-slate-400 hover:text-indigo-600 p-2"><Edit2 size={16}/></button>
                       </div>
@@ -159,27 +148,61 @@ export const ClientManager: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPartners.map(partner => (
-              <div key={partner.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between hover:shadow-md transition-shadow group relative">
-                <h3 className="text-xl font-bold text-slate-800">{partner.name}</h3>
+              <div key={partner.id} onClick={() => handleOpenPartner(partner)} className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 flex flex-col justify-between hover:shadow-xl hover:border-indigo-200 transition-all group relative cursor-pointer">
+                <div className="flex justify-between items-start mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300"><Briefcase size={28}/></div>
+                    <button className="text-slate-300 hover:text-indigo-600 transition-colors"><Edit2 size={18}/></button>
+                </div>
+                <div>
+                    <h3 className="text-xl font-black text-slate-900 mb-2">{partner.name}</h3>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{partner.implementationDays} dias de implementação</p>
+                </div>
+                <div className="mt-8 pt-6 border-t border-slate-50 flex justify-between items-center">
+                    <div className="flex flex-col"><span className="text-[10px] font-black text-slate-400 uppercase">Projetos</span><span className="text-lg font-black text-slate-900">{partner.totalReferrals || 0}</span></div>
+                    <div className="flex flex-col text-right"><span className="text-[10px] font-black text-slate-400 uppercase">Comissão</span><span className="text-lg font-black text-emerald-600">R$ {(partner.totalCommissionPaid || 0).toLocaleString()}</span></div>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
 
+      {isPartnerModalOpen && selectedPartner && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsPartnerModalOpen(false)}></div>
+              <div className="relative bg-white rounded-[40px] shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300">
+                  <div className="px-10 py-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                      <h3 className="text-xl font-black text-slate-900 flex items-center gap-3"><Briefcase className="text-indigo-600"/> Gestão de Parceiro</h3>
+                      <button onClick={() => setIsPartnerModalOpen(false)} className="p-2 text-slate-400 hover:bg-white rounded-xl transition-all"><X size={28}/></button>
+                  </div>
+                  <div className="p-10 space-y-6">
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome da Empresa Parceira</label>
+                          <input className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[20px] font-bold text-slate-900 outline-none focus:bg-white" value={selectedPartner.name} onChange={e => setSelectedPartner({...selectedPartner, name: e.target.value})} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Dias de Implementação</label>
+                              <input type="number" className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[20px] font-bold text-slate-900" value={selectedPartner.implementationDays} onChange={e => setSelectedPartner({...selectedPartner, implementationDays: Number(e.target.value)})} />
+                          </div>
+                          <div className="space-y-1.5">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fee de Implementação</label>
+                              <input type="number" className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[20px] font-bold text-slate-900" value={selectedPartner.implementationFee} onChange={e => setSelectedPartner({...selectedPartner, implementationFee: Number(e.target.value)})} />
+                          </div>
+                      </div>
+                  </div>
+                  <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                      <button onClick={() => setIsPartnerModalOpen(false)} className="px-8 py-3 text-slate-600 font-bold hover:bg-white rounded-2xl transition-all">Cancelar</button>
+                      <button onClick={handleSavePartner} className="px-10 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 shadow-xl flex items-center gap-2"><Save size={18}/> Salvar Parceiro</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {selectedClient && (
-          <ClientDetailModal 
-            client={selectedClient}
-            onClose={() => setSelectedClient(null)}
-            onUpdate={(uc) => {
-                setClients(clients.map(c => c.id === uc.id ? uc : c));
-                loadData();
-            }}
-            onDelete={(id) => {
-                api.deleteClientsBulk([id]);
-                setClients(clients.filter(c => c.id !== id));
-                setSelectedClient(null);
-            }}
+          <ClientDetailModal client={selectedClient} onClose={() => setSelectedClient(null)} 
+            onUpdate={(uc) => { setClients(clients.map(c => c.id === uc.id ? uc : c)); loadData(); }}
+            onDelete={(id) => { api.deleteClientsBulk([id]); setClients(clients.filter(c => c.id !== id)); setSelectedClient(null); }}
           />
       )}
     </div>

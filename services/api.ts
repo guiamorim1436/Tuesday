@@ -6,195 +6,84 @@ import {
   ClientStatus
 } from '../types';
 import * as MOCK from '../constants';
-import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-const isValidUUID = (id?: string) => !!id && id.length === 36;
-
-const mapTaskToDb = (t: Partial<Task>) => {
-    const data: any = {
-        title: t.title,
-        description: t.description || '',
-        client_id: isValidUUID(t.clientId) ? t.clientId : null,
-        status: t.status || TaskStatus.BACKLOG,
-        priority: t.priority || TaskPriority.MEDIUM,
-        start_date: t.startDate ? new Date(t.startDate).toISOString() : null,
-        due_date: t.dueDate ? new Date(t.dueDate).toISOString() : null,
-        estimated_hours: Number(t.estimatedHours) || 0,
-        actual_hours: Number(t.actualHours) || 0,
-        category: t.category || 'Geral',
-        is_tracking_time: !!t.isTrackingTime,
-        last_time_log_start: t.lastTimeLogStart || null,
-        assignees: t.assignees || [],
-        subtasks: t.subtasks || [],
-        comments: t.comments || [],
-        attachments: t.attachments || [],
-        custom_fields: t.customFields || {}
-    };
-    if (isValidUUID(t.id)) data.id = t.id;
-    return data;
-};
-
-const mapDbToTask = (t: any): Task => ({
-    ...t,
-    clientId: t.client_id,
-    startDate: t.start_date,
-    dueDate: t.due_date,
-    estimatedHours: t.estimated_hours,
-    actualHours: t.actual_hours || 0,
-    isTrackingTime: t.is_tracking_time || false,
-    lastTimeLogStart: t.last_time_log_start,
-    assignees: t.assignees || [],
-    subtasks: t.subtasks || [],
-    comments: t.comments || [],
-    attachments: t.attachments || []
-});
-
-const mapClientToDb = (c: Partial<Client>) => {
-    const data: any = {
-        name: c.name,
-        description: c.description || '',
-        status: c.status || ClientStatus.ONBOARDING,
-        sla_tier_id: isValidUUID(c.slaTierId) ? c.slaTierId : null,
-        partner_id: isValidUUID(c.partnerId) ? c.partnerId : null,
-        onboarding_date: c.onboardingDate || new Date().toISOString().split('T')[0],
-        health_score: Number(c.healthScore) ?? 100,
-        hours_used_month: Number(c.hoursUsedMonth) || 0,
-        billing_day: Number(c.billingDay) || 1,
-        attachments: c.attachments || [],
-        comments: c.comments || [],
-        custom_fields: c.customFields || {}
-    };
-    if (isValidUUID(c.id)) data.id = c.id;
-    return data;
-};
-
-const mapDbToClient = (c: any): Client => ({
-    ...c,
-    slaTierId: c.sla_tier_id,
-    partnerId: c.partner_id,
-    onboardingDate: c.onboarding_date,
-    healthScore: c.health_score,
-    hoursUsedMonth: c.hours_used_month || 0,
-    billingDay: c.billing_day || 1,
-    attachments: c.attachments || [],
-    comments: c.comments || [],
-    customFields: c.custom_fields || {}
-});
+const N8N_PROD = "https://n8n.vps6935.panel.icontainer.net/webhook/3acf6ed2-6801-40c0-b8b1-cd59d82b16b5";
+const N8N_TEST = "https://n8n.vps6935.panel.icontainer.net/webhook-test/3acf6ed2-6801-40c0-b8b1-cd59d82b16b5";
 
 export const api = {
-    initializeDatabase: async () => { if (isConfigured) console.log("🛡️ Tuesday Core Connected"); },
+    initializeDatabase: async () => { if (isConfigured) console.log("🛡️ Tuesday Connected"); },
 
-    getTasks: async (): Promise<Task[]> => {
-        if (!isConfigured) return MOCK.MOCK_TASKS;
-        const { data, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
-        if (error) return [];
-        return data.map(mapDbToTask);
+    // --- CHAT API ---
+    getChatConversations: async () => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('chat_conversations').select('*').order('updated_at', { ascending: false });
+        return data || [];
     },
 
-    createTask: async (task: Partial<Task>): Promise<Task> => {
-        if (!isConfigured) {
-            const mockTask = { ...task, id: Math.random().toString(), createdAt: new Date().toISOString(), actualHours: 0 } as any;
-            MOCK.MOCK_TASKS.push(mockTask);
-            return mockTask;
-        }
-        
-        if (!task.dueDate) {
-            const start = task.startDate ? new Date(task.startDate) : new Date();
-            start.setHours(start.getHours() + (task.estimatedHours || 4));
-            task.dueDate = start.toISOString();
-        }
-
-        const payload = mapTaskToDb(task);
-        const { data, error } = await supabase.from('tasks').insert([payload]).select().single();
-        if (error) {
-            console.error("❌ Erro Supabase (Tasks):", error);
-            throw new Error(error.message);
-        }
-        return mapDbToTask(data);
+    getChatMessages: async (conversationId: string) => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('chat_messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: true });
+        return data || [];
     },
 
-    updateTask: async (task: Task): Promise<Task> => {
-        if (!isConfigured) {
-            const idx = MOCK.MOCK_TASKS.findIndex(t => t.id === task.id);
-            if(idx !== -1) MOCK.MOCK_TASKS[idx] = task;
-            return task;
-        }
-        const { data, error } = await supabase.from('tasks').update(mapTaskToDb(task)).eq('id', task.id).select().single();
+    sendMessage: async (remoteJid: string, content: string) => {
+        if (!isConfigured) return;
+        const { data: msg, error } = await supabase.from('chat_messages').insert([{ remote_jid: remoteJid, content: content, from_me: true, read_at: new Date().toISOString() }]).select().single();
         if (error) throw error;
-        return mapDbToTask(data);
-    },
-
-    deleteTask: async (id: string) => { 
-        if (!isConfigured) {
-            const idx = MOCK.MOCK_TASKS.findIndex(t => t.id === id);
-            if(idx !== -1) MOCK.MOCK_TASKS.splice(idx, 1);
-            return;
-        }
-        await supabase.from('tasks').delete().eq('id', id); 
-    },
-    
-    getWorkConfig: async (): Promise<WorkConfig | null> => {
-        if (!isConfigured) return MOCK.DEFAULT_WORK_CONFIG;
+        const payload = { remoteJid, message: content, timestamp: new Date().toISOString() };
         try {
-            const { data } = await supabase.from('app_settings').select('value').eq('key', 'work_config').single();
-            return data?.value || MOCK.DEFAULT_WORK_CONFIG;
-        } catch (e) { return MOCK.DEFAULT_WORK_CONFIG; }
+            await Promise.all([
+                fetch(N8N_PROD, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) }),
+                fetch(N8N_TEST, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) })
+            ]);
+        } catch (e) { console.error(e); }
+        return msg;
     },
 
-    saveWorkConfig: async (config: WorkConfig) => {
-        if (isConfigured) await supabase.from('app_settings').upsert({ key: 'work_config', value: config });
+    markChatAsRead: async (conversationId: string) => {
+        if (!isConfigured) return;
+        await supabase.from('chat_messages').update({ read_at: new Date().toISOString() }).eq('conversation_id', conversationId).is('read_at', null);
+        await supabase.from('chat_conversations').update({ unread_count: 0 }).eq('id', conversationId);
     },
 
-    getCompanySettings: async (): Promise<CompanySettings> => {
-        if (!isConfigured) return { name: 'Sua Agência', cnpj: '', email: '', phone: '', address: '' };
-        const { data } = await supabase.from('app_settings').select('value').eq('key', 'company_settings').single();
-        return data?.value || { name: 'Sua Agência', cnpj: '', email: '', phone: '', address: '' };
-    },
-
-    saveCompanySettings: async (settings: CompanySettings) => {
-        if (isConfigured) await supabase.from('app_settings').upsert({ key: 'company_settings', value: settings });
-    },
-
-    getClients: async (): Promise<Client[]> => {
-        if (!isConfigured) return MOCK.MOCK_CLIENTS;
-        const { data, error } = await supabase.from('clients').select('*').order('name');
-        if (error) return [];
-        return data?.map(mapDbToClient) || [];
-    },
-
-    updateClient: async (client: Partial<Client>): Promise<Client> => {
-        if (!isConfigured) return client as Client;
-        const payload = mapClientToDb(client);
-        const { data, error } = await supabase.from('clients').upsert(payload).select().single();
-        if (error) {
-            console.error("❌ Erro Supabase (Clients):", error);
-            throw new Error(error.message);
-        }
-        return mapDbToClient(data);
-    },
-
-    deleteClientsBulk: async (ids: string[]) => {
-        if (isConfigured) await supabase.from('clients').delete().in('id', ids);
-    },
-
+    // --- PARTNERS ---
     getPartners: async (): Promise<Partner[]> => {
-        if (!isConfigured) return MOCK_PARTNERS;
+        if (!isConfigured) return MOCK.MOCK_PARTNERS;
         const { data } = await supabase.from('partners').select('*').order('name');
         return data || [];
     },
 
-    getUsers: async (): Promise<User[]> => {
-        if (!isConfigured) return MOCK_USERS as any;
-        const { data } = await supabase.from('users').select('*').order('name');
+    createPartner: async (partner: Partial<Partner>): Promise<Partner> => {
+        if (!isConfigured) {
+            const newP = { ...partner, id: Math.random().toString() } as Partner;
+            MOCK.MOCK_PARTNERS.push(newP);
+            return newP;
+        }
+        const { data, error } = await supabase.from('partners').insert([partner]).select().single();
+        if (error) throw error;
+        return data;
+    },
+
+    updatePartner: async (partner: Partner): Promise<Partner> => {
+        if (!isConfigured) return partner;
+        const { data, error } = await supabase.from('partners').update(partner).eq('id', partner.id).select().single();
+        if (error) throw error;
+        return data;
+    },
+
+    // --- SLA TIERS (PLANOS) ---
+    getSLATiers: async (): Promise<SLATier[]> => {
+        if (!isConfigured) return MOCK.DEFAULT_SLA_TIERS;
+        const { data } = await supabase.from('sla_tiers').select('*').order('price');
         return data || [];
     },
 
-    getSLATiers: async () => isConfigured ? (await supabase.from('sla_tiers').select('*')).data || [] : MOCK.DEFAULT_SLA_TIERS,
-    
     createSLATier: async (tier: Partial<SLATier>): Promise<SLATier> => {
-        if (!isConfigured) return { ...tier, id: Math.random().toString() } as SLATier;
+        if (!isConfigured) {
+            const newT = { ...tier, id: Math.random().toString() } as SLATier;
+            MOCK.DEFAULT_SLA_TIERS.push(newT);
+            return newT;
+        }
         const { data, error } = await supabase.from('sla_tiers').insert([tier]).select().single();
         if (error) throw error;
         return data;
@@ -208,149 +97,59 @@ export const api = {
     },
 
     deleteSLATier: async (id: string) => {
-        if (isConfigured) await supabase.from('sla_tiers').delete().eq('id', id);
+        if (!isConfigured) return;
+        await supabase.from('sla_tiers').delete().eq('id', id);
     },
 
-    getCatalogItems: async (): Promise<CatalogItem[]> => {
-        if (!isConfigured) return MOCK_CATALOG;
-        const { data } = await supabase.from('catalog_items').select('*').order('name');
-        return data || [];
-    },
-
-    createCatalogItem: async (item: Partial<CatalogItem>): Promise<CatalogItem> => {
-        if (!isConfigured) return { ...item, id: Math.random().toString() } as CatalogItem;
-        const { data, error } = await supabase.from('catalog_items').insert([item]).select().single();
+    // --- TASKS & OTHERS ---
+    getTasks: async () => (isConfigured ? (await supabase.from('tasks').select('*')).data || [] : MOCK.MOCK_TASKS),
+    createTask: async (task: any) => (await supabase.from('tasks').insert([task]).select().single()).data,
+    updateTask: async (task: any) => (await supabase.from('tasks').update(task).eq('id', task.id).select().single()).data,
+    deleteTask: async (id: string) => await supabase.from('tasks').delete().eq('id', id),
+    getWorkConfig: async () => MOCK.DEFAULT_WORK_CONFIG,
+    saveWorkConfig: async (c: any) => {},
+    getClients: async () => (isConfigured ? (await supabase.from('clients').select('*')).data || [] : MOCK.MOCK_CLIENTS),
+    updateClient: async (client: Client) => {
+        if (!isConfigured) return client;
+        const { data, error } = await supabase.from('clients').update({
+            name: client.name, status: client.status, sla_tier_id: client.slaTierId, partner_id: client.partnerId,
+            onboarding_date: client.onboardingDate, description: client.description, billing_day: client.billingDay
+        }).eq('id', client.id).select().single();
         if (error) throw error;
         return data;
     },
-
-    updateCatalogItem: async (item: CatalogItem): Promise<CatalogItem> => {
-        if (!isConfigured) return item;
-        const { data, error } = await supabase.from('catalog_items').update(item).eq('id', item.id).select().single();
-        if (error) throw error;
-        return data;
-    },
-
-    deleteCatalogItem: async (id: string) => {
-        if (isConfigured) await supabase.from('catalog_items').delete().eq('id', id);
-    },
-
-    getSubscriptions: async (): Promise<SubscriptionItem[]> => {
-        if (!isConfigured) return [];
-        const { data } = await supabase.from('subscriptions').select('*').order('name');
-        return data || [];
-    },
-
-    createSubscription: async (item: Partial<SubscriptionItem>): Promise<SubscriptionItem> => {
-        if (!isConfigured) return { ...item, id: Math.random().toString() } as SubscriptionItem;
-        const { data, error } = await supabase.from('subscriptions').insert([item]).select().single();
-        if (error) throw error;
-        return data;
-    },
-
-    updateSubscription: async (item: SubscriptionItem): Promise<SubscriptionItem> => {
-        if (!isConfigured) return item;
-        const { data, error } = await supabase.from('subscriptions').update(item).eq('id', item.id).select().single();
-        if (error) throw error;
-        return data;
-    },
-
-    deleteSubscription: async (id: string) => {
-        if (isConfigured) await supabase.from('subscriptions').delete().eq('id', id);
-    },
-
-    getTransactions: async () => {
-        if (!isConfigured) return MOCK.MOCK_TRANSACTIONS;
-        const { data } = await supabase.from('transactions').select('*').order('date', { ascending: false });
-        return data || [];
-    },
-    
-    createTransaction: async (tr: Partial<Transaction>): Promise<Transaction> => {
-        if (!isConfigured) return { ...tr, id: Math.random().toString() } as Transaction;
-        const payload = {
-            date: tr.date,
-            description: tr.description,
-            category: tr.category,
-            amount: tr.amount,
-            type: tr.type,
-            status: tr.status,
-            frequency: tr.frequency,
-            client_id: isValidUUID(tr.clientId) ? tr.clientId : null
-        };
-        const { data, error } = await supabase.from('transactions').insert([payload]).select().single();
-        if (error) {
-            console.error("❌ Erro Supabase (Finance):", error);
-            throw new Error(error.message);
-        }
-        return data;
-    },
-
-    deleteTransactionsBulk: async (ids: string[]) => {
-        if (isConfigured) await supabase.from('transactions').delete().in('id', ids);
-    },
-
-    deleteTransaction: async (id: string) => {
-        if (isConfigured) await supabase.from('transactions').delete().eq('id', id);
-    },
-
-    getServiceCategories: async () => {
-        if (!isConfigured) return MOCK.DEFAULT_CATEGORIES;
-        const { data } = await supabase.from('service_categories').select('*').order('name');
-        return data || [];
-    },
-    
-    createServiceCategory: async (name: string, isBillable: boolean) => {
-        if (!isConfigured) return { id: Math.random().toString(), name, isBillable };
-        const { data, error } = await supabase.from('service_categories').insert([{ name, is_billable: isBillable }]).select().single();
-        if (error) throw error;
-        return data;
-    },
-    
-    deleteServiceCategory: async (id: string) => {
-        if (isConfigured) await supabase.from('service_categories').delete().eq('id', id);
-    },
-    
-    getTransactionCategories: async () => MOCK.DEFAULT_FINANCE_CATEGORIES.map(n => ({id: n, name: n})),
-    createTransactionCategory: async (name: string) => ({ id: name, name }),
-    deleteTransactionCategory: async (id: string) => {},
-    
-    getTaskTemplates: async () => {
-        if (!isConfigured) return MOCK.DEFAULT_TASK_TEMPLATES;
-        const { data } = await supabase.from('task_template_groups').select('*');
-        return data || [];
-    },
-    
-    updateTaskTemplateGroup: async (group: TaskTemplateGroup) => group,
-    createTaskTemplateGroup: async (group: Partial<TaskTemplateGroup>) => ({ ...group, id: Math.random().toString() } as TaskTemplateGroup),
-    deleteTaskTemplateGroup: async (id: string) => {},
-    
-    getPlaybooks: async () => {
-        if (!isConfigured) return [];
-        const { data } = await supabase.from('playbooks').select('*');
-        return data || [];
-    },
-    
-    createPlaybook: async (p: Partial<Playbook>) => ({ ...p, id: Math.random().toString(), updatedAt: new Date().toISOString() } as Playbook),
-    updatePlaybook: async (p: Playbook) => p,
-    deletePlaybook: async (id: string) => {},
-    
+    deleteClientsBulk: async (ids: any) => { if(isConfigured) await supabase.from('clients').delete().in('id', ids); },
+    getServiceCategories: async () => MOCK.DEFAULT_CATEGORIES,
+    createServiceCategory: async (n: any, b: any) => ({id:'', name:n, isBillable:b}),
+    deleteServiceCategory: async (id: any) => {},
+    getTransactionCategories: async () => [],
+    createTransactionCategory: async (n: any) => ({id:'', name:n}),
+    deleteTransactionCategory: async (id: any) => {},
+    getTaskTemplates: async () => MOCK.DEFAULT_TASK_TEMPLATES,
+    createTaskTemplateGroup: async (g: any) => g,
+    updateTaskTemplateGroup: async (g: any) => g,
+    deleteTaskTemplateGroup: async (id: any) => {},
+    getPlaybooks: async () => [],
+    createPlaybook: async (p: any) => p,
+    updatePlaybook: async (p: any) => p,
+    deletePlaybook: async (id: any) => {},
+    generatePlaybookStructure: async (p: any, c: any) => [],
+    getCompanySettings: async () => (isConfigured ? (await supabase.from('app_settings').select('value').eq('key', 'company_settings').single()).data?.value : {name:'Tuesday', cnpj:'', email:'', phone:'', address:''}),
+    saveCompanySettings: async (s: any) => {},
     getGoogleCalendarStatus: async () => false,
-    saveGoogleCalendarConfig: async (active: boolean) => {},
-    
-    generatePlaybookStructure: async (prompt: string, clientName: string): Promise<PlaybookBlock[]> => {
-        try {
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-pro-preview',
-                contents: `Create a structured playbook/SOP for a client named "${clientName}" based on the following request: "${prompt}". Output must be valid JSON array of blocks with type/content.`,
-                config: { responseMimeType: "application/json" },
-            });
-            return JSON.parse(response.text || '[]');
-        } catch (e) {
-            console.error(e);
-            return [];
-        }
-    },
-
+    saveGoogleCalendarConfig: async (a: any) => {},
+    getCatalogItems: async () => (isConfigured ? (await supabase.from('catalog_items').select('*')).data || [] : MOCK.MOCK_CATALOG),
+    createCatalogItem: async (item: any) => (isConfigured ? (await supabase.from('catalog_items').insert([item]).select().single()).data : item),
+    updateCatalogItem: async (item: any) => (isConfigured ? (await supabase.from('catalog_items').update(item).eq('id', item.id).select().single()).data : item),
+    deleteCatalogItem: async (id: any) => { if(isConfigured) await supabase.from('catalog_items').delete().eq('id', id); },
+    getSubscriptions: async () => (isConfigured ? (await supabase.from('subscriptions').select('*')).data || [] : []),
+    createSubscription: async (s: any) => (isConfigured ? (await supabase.from('subscriptions').insert([s]).select().single()).data : s),
+    updateSubscription: async (s: any) => (isConfigured ? (await supabase.from('subscriptions').update(s).eq('id', s.id).select().single()).data : s),
+    deleteSubscription: async (id: any) => { if(isConfigured) await supabase.from('subscriptions').delete().eq('id', id); },
+    getTransactions: async () => (isConfigured ? (await supabase.from('transactions').select('*')).data || [] : MOCK.MOCK_TRANSACTIONS),
+    createTransaction: async (t: any) => (isConfigured ? (await supabase.from('transactions').insert([t]).select().single()).data : t),
+    deleteTransaction: async (id: any) => { if(isConfigured) await supabase.from('transactions').delete().eq('id', id); },
+    getUsers: async () => (isConfigured ? (await supabase.from('users').select('*')).data || [] : MOCK.MOCK_USERS as any),
     login: async (e: string, p: string) => MOCK.MOCK_USERS.find(u => u.email === e) || null,
-    logout: async () => localStorage.removeItem('tuesday_current_user')
+    logout: async () => {}
 };
