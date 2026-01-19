@@ -514,7 +514,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, clients, users, onSelect, con
             <h4 className="font-bold text-slate-800 text-sm mb-4 leading-relaxed group-hover:text-indigo-600 transition-colors line-clamp-2">{task.title}</h4>
             
             {(config.showHours || config.showDeadline) && (
-                <div className="flex flex-wrap gap-3 mb-4">
+                <div className="flex wrap gap-3 mb-4">
                     {config.showDeadline && (
                         <div className={`flex items-center text-[9px] font-black ${isOverdue ? 'text-rose-500' : 'text-slate-400'}`}>
                             <Clock size={12} className="mr-1"/> 
@@ -527,7 +527,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, clients, users, onSelect, con
 
             <div className="flex items-center justify-between border-t border-slate-50 pt-4 mt-auto">
                 <div className="flex -space-x-1.5">
-                    {config.showAssignees && task.assignees.map(uid => <div key={uid} className="w-5 h-5 rounded-full bg-indigo-50 border border-white flex items-center justify-center text-[8px] font-black text-indigo-600 uppercase">{users.find(u => u.id === uid)?.name.charAt(0)}</div>)}
+                    {config.showAssignees && task.assignees?.map(uid => <div key={uid} className="w-5 h-5 rounded-full bg-indigo-50 border border-white flex items-center justify-center text-[8px] font-black text-indigo-600 uppercase">{users.find(u => u.id === uid)?.name.charAt(0)}</div>)}
                 </div>
                 {task.comments?.length > 0 && <div className="text-[9px] font-bold text-slate-400 flex items-center gap-1"><Plus size={10} className="rotate-45"/> {task.comments.length}</div>}
             </div>

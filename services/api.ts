@@ -102,12 +102,63 @@ export const api = {
     },
 
     // --- TASKS & OTHERS ---
-    getTasks: async () => (isConfigured ? (await supabase.from('tasks').select('*')).data || [] : MOCK.MOCK_TASKS),
-    createTask: async (task: any) => (await supabase.from('tasks').insert([task]).select().single()).data,
-    updateTask: async (task: any) => (await supabase.from('tasks').update(task).eq('id', task.id).select().single()).data,
+    getTasks: async (): Promise<Task[]> => {
+        if (!isConfigured) return MOCK.MOCK_TASKS;
+        const { data } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+        // Normalização crucial para evitar erros de renderização (map)
+        return (data || []).map(t => ({
+            ...t,
+            clientId: t.client_id || t.clientId,
+            startDate: t.start_date || t.startDate,
+            dueDate: t.due_date || t.dueDate,
+            estimatedHours: t.estimated_hours || t.estimatedHours || 0,
+            actualHours: t.actual_hours || t.actualHours || 0,
+            assignees: Array.isArray(t.assignees) ? t.assignees : [],
+            subtasks: Array.isArray(t.subtasks) ? t.subtasks : [],
+            comments: Array.isArray(t.comments) ? t.comments : [],
+            attachments: Array.isArray(t.attachments) ? t.attachments : [],
+            customFields: t.custom_fields || {}
+        }));
+    },
+    createTask: async (task: Partial<Task>): Promise<Task> => {
+        if (!isConfigured) return { ...task, id: Math.random().toString(), createdAt: new Date().toISOString() } as any;
+        const { data, error } = await supabase.from('tasks').insert([{
+            title: task.title,
+            description: task.description || '',
+            client_id: task.clientId,
+            status: task.status || TaskStatus.BACKLOG,
+            priority: task.priority || TaskPriority.MEDIUM,
+            start_date: task.startDate,
+            due_date: task.dueDate,
+            estimated_hours: task.estimatedHours,
+            category: task.category || 'Geral',
+            assignees: [],
+            subtasks: [],
+            comments: [],
+            attachments: []
+        }]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    updateTask: async (task: Task): Promise<Task> => {
+        if (!isConfigured) return task;
+        const { data, error } = await supabase.from('tasks').update({
+            title: task.title,
+            status: task.status,
+            priority: task.priority,
+            description: task.description,
+            actual_hours: task.actualHours,
+            assignees: task.assignees,
+            subtasks: task.subtasks,
+            comments: task.comments,
+            attachments: task.attachments
+        }).eq('id', task.id).select().single();
+        if (error) throw error;
+        return data;
+    },
     deleteTask: async (id: string) => await supabase.from('tasks').delete().eq('id', id),
-    getWorkConfig: async () => MOCK.DEFAULT_WORK_CONFIG,
-    saveWorkConfig: async (c: any) => {},
+    getWorkConfig: async () => (isConfigured ? (await supabase.from('app_settings').select('value').eq('key', 'work_config').single()).data?.value : MOCK.DEFAULT_WORK_CONFIG) || MOCK.DEFAULT_WORK_CONFIG,
+    saveWorkConfig: async (c: any) => { if(isConfigured) await supabase.from('app_settings').upsert({ key: 'work_config', value: c }); },
     getClients: async () => (isConfigured ? (await supabase.from('clients').select('*')).data || [] : MOCK.MOCK_CLIENTS),
     updateClient: async (client: Client) => {
         if (!isConfigured) return client;
@@ -119,23 +170,47 @@ export const api = {
         return data;
     },
     deleteClientsBulk: async (ids: any) => { if(isConfigured) await supabase.from('clients').delete().in('id', ids); },
-    getServiceCategories: async () => MOCK.DEFAULT_CATEGORIES,
-    createServiceCategory: async (n: any, b: any) => ({id:'', name:n, isBillable:b}),
-    deleteServiceCategory: async (id: any) => {},
-    getTransactionCategories: async () => [],
-    createTransactionCategory: async (n: any) => ({id:'', name:n}),
-    deleteTransactionCategory: async (id: any) => {},
-    getTaskTemplates: async () => MOCK.DEFAULT_TASK_TEMPLATES,
-    createTaskTemplateGroup: async (g: any) => g,
-    updateTaskTemplateGroup: async (g: any) => g,
-    deleteTaskTemplateGroup: async (id: any) => {},
-    getPlaybooks: async () => [],
-    createPlaybook: async (p: any) => p,
-    updatePlaybook: async (p: any) => p,
-    deletePlaybook: async (id: any) => {},
+    getServiceCategories: async () => (isConfigured ? (await supabase.from('service_categories').select('*')).data || [] : MOCK.DEFAULT_CATEGORIES),
+    createServiceCategory: async (n: any, b: any) => {
+        if(!isConfigured) return {id: Math.random().toString(), name:n, isBillable:b};
+        const { data } = await supabase.from('service_categories').insert([{name: n, is_billable: b}]).select().single();
+        return data;
+    },
+    deleteServiceCategory: async (id: any) => { if(isConfigured) await supabase.from('service_categories').delete().eq('id', id); },
+    getTransactionCategories: async () => (isConfigured ? (await supabase.from('transaction_categories').select('*')).data || [] : []),
+    createTransactionCategory: async (n: any) => {
+        if(!isConfigured) return {id: Math.random().toString(), name:n};
+        const { data } = await supabase.from('transaction_categories').insert([{name: n}]).select().single();
+        return data;
+    },
+    deleteTransactionCategory: async (id: any) => { if(isConfigured) await supabase.from('transaction_categories').delete().eq('id', id); },
+    getTaskTemplates: async () => (isConfigured ? (await supabase.from('task_template_groups').select('*')).data || [] : MOCK.DEFAULT_TASK_TEMPLATES),
+    createTaskTemplateGroup: async (g: any) => {
+        if(!isConfigured) return {...g, id: Math.random().toString()};
+        const { data } = await supabase.from('task_template_groups').insert([g]).select().single();
+        return data;
+    },
+    updateTaskTemplateGroup: async (g: any) => {
+        if(!isConfigured) return g;
+        const { data } = await supabase.from('task_template_groups').update(g).eq('id', g.id).select().single();
+        return data;
+    },
+    deleteTaskTemplateGroup: async (id: any) => { if(isConfigured) await supabase.from('task_template_groups').delete().eq('id', id); },
+    getPlaybooks: async () => (isConfigured ? (await supabase.from('playbooks').select('*')).data || [] : []),
+    createPlaybook: async (p: any) => {
+        if(!isConfigured) return {...p, id: Math.random().toString(), updatedAt: new Date().toISOString()};
+        const { data } = await supabase.from('playbooks').insert([p]).select().single();
+        return data;
+    },
+    updatePlaybook: async (p: any) => {
+        if(!isConfigured) return p;
+        const { data } = await supabase.from('playbooks').update({...p, updatedAt: new Date().toISOString()}).eq('id', p.id).select().single();
+        return data;
+    },
+    deletePlaybook: async (id: any) => { if(isConfigured) await supabase.from('playbooks').delete().eq('id', id); },
     generatePlaybookStructure: async (p: any, c: any) => [],
     getCompanySettings: async () => (isConfigured ? (await supabase.from('app_settings').select('value').eq('key', 'company_settings').single()).data?.value : {name:'Tuesday', cnpj:'', email:'', phone:'', address:''}),
-    saveCompanySettings: async (s: any) => {},
+    saveCompanySettings: async (s: any) => { if(isConfigured) await supabase.from('app_settings').upsert({ key: 'company_settings', value: s }); },
     getGoogleCalendarStatus: async () => false,
     saveGoogleCalendarConfig: async (a: any) => {},
     getCatalogItems: async () => (isConfigured ? (await supabase.from('catalog_items').select('*')).data || [] : MOCK.MOCK_CATALOG),
