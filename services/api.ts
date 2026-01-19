@@ -105,7 +105,6 @@ export const api = {
     getTasks: async (): Promise<Task[]> => {
         if (!isConfigured) return MOCK.MOCK_TASKS;
         const { data } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
-        // Normalização crucial para evitar erros de renderização (map)
         return (data || []).map(t => ({
             ...t,
             clientId: t.client_id || t.clientId,
@@ -142,16 +141,22 @@ export const api = {
     },
     updateTask: async (task: Task): Promise<Task> => {
         if (!isConfigured) return task;
+        // Garantindo mapeamento correto para o banco (snake_case)
         const { data, error } = await supabase.from('tasks').update({
             title: task.title,
             status: task.status,
             priority: task.priority,
             description: task.description,
+            client_id: task.clientId,
+            start_date: task.startDate,
+            due_date: task.dueDate,
+            estimated_hours: task.estimatedHours,
             actual_hours: task.actualHours,
             assignees: task.assignees,
             subtasks: task.subtasks,
             comments: task.comments,
-            attachments: task.attachments
+            attachments: task.attachments,
+            category: task.category
         }).eq('id', task.id).select().single();
         if (error) throw error;
         return data;
@@ -159,12 +164,35 @@ export const api = {
     deleteTask: async (id: string) => await supabase.from('tasks').delete().eq('id', id),
     getWorkConfig: async () => (isConfigured ? (await supabase.from('app_settings').select('value').eq('key', 'work_config').single()).data?.value : MOCK.DEFAULT_WORK_CONFIG) || MOCK.DEFAULT_WORK_CONFIG,
     saveWorkConfig: async (c: any) => { if(isConfigured) await supabase.from('app_settings').upsert({ key: 'work_config', value: c }); },
-    getClients: async () => (isConfigured ? (await supabase.from('clients').select('*')).data || [] : MOCK.MOCK_CLIENTS),
+    getClients: async () => {
+        if (!isConfigured) return MOCK.MOCK_CLIENTS;
+        const { data } = await supabase.from('clients').select('*').order('name');
+        return (data || []).map(c => ({
+            ...c,
+            slaTierId: c.sla_tier_id || c.slaTierId,
+            partnerId: c.partner_id || c.partnerId,
+            onboardingDate: c.onboarding_date || c.onboardingDate,
+            healthScore: c.health_score || c.healthScore || 100,
+            hoursUsedMonth: c.hours_used_month || c.hoursUsedMonth || 0,
+            hasImplementation: c.has_implementation || c.hasImplementation,
+            billingDay: c.billing_day || c.billingDay
+        }));
+    },
     updateClient: async (client: Client) => {
         if (!isConfigured) return client;
+        // Mapeamento explícito para evitar erros de coluna no Supabase
         const { data, error } = await supabase.from('clients').update({
-            name: client.name, status: client.status, sla_tier_id: client.slaTierId, partner_id: client.partnerId,
-            onboarding_date: client.onboardingDate, description: client.description, billing_day: client.billingDay
+            name: client.name,
+            status: client.status,
+            sla_tier_id: client.slaTierId,
+            partner_id: client.partnerId,
+            onboarding_date: client.onboardingDate,
+            description: client.description,
+            billing_day: client.billingDay,
+            health_score: client.healthScore,
+            hours_used_month: client.hoursUsedMonth,
+            has_implementation: client.hasImplementation,
+            custom_fields: client.customFields
         }).eq('id', client.id).select().single();
         if (error) throw error;
         return data;
@@ -221,8 +249,29 @@ export const api = {
     createSubscription: async (s: any) => (isConfigured ? (await supabase.from('subscriptions').insert([s]).select().single()).data : s),
     updateSubscription: async (s: any) => (isConfigured ? (await supabase.from('subscriptions').update(s).eq('id', s.id).select().single()).data : s),
     deleteSubscription: async (id: any) => { if(isConfigured) await supabase.from('subscriptions').delete().eq('id', id); },
-    getTransactions: async () => (isConfigured ? (await supabase.from('transactions').select('*')).data || [] : MOCK.MOCK_TRANSACTIONS),
-    createTransaction: async (t: any) => (isConfigured ? (await supabase.from('transactions').insert([t]).select().single()).data : t),
+    getTransactions: async () => {
+        if (!isConfigured) return MOCK.MOCK_TRANSACTIONS;
+        const { data } = await supabase.from('transactions').select('*').order('date', { ascending: false });
+        return (data || []).map(t => ({
+            ...t,
+            clientId: t.client_id || t.clientId,
+            partnerId: t.partner_id || t.partnerId
+        }));
+    },
+    createTransaction: async (t: Partial<Transaction>) => {
+        if (!isConfigured) return t as Transaction;
+        const { data } = await supabase.from('transactions').insert([{
+            date: t.date,
+            description: t.description,
+            category: t.category,
+            amount: t.amount,
+            type: t.type,
+            status: t.status,
+            client_id: t.clientId,
+            partner_id: t.partnerId
+        }]).select().single();
+        return data;
+    },
     deleteTransaction: async (id: any) => { if(isConfigured) await supabase.from('transactions').delete().eq('id', id); },
     getUsers: async () => (isConfigured ? (await supabase.from('users').select('*')).data || [] : MOCK.MOCK_USERS as any),
     login: async (e: string, p: string) => MOCK.MOCK_USERS.find(u => u.email === e) || null,

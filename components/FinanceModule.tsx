@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownLeft, FileText, Download, Plus, Filter, Trash2, Edit2, X, Calendar, Repeat, Settings, Check, AlertCircle, Loader2, Upload, CheckSquare, Square, Save } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownLeft, FileText, Download, Plus, Filter, Trash2, Edit2, X, Calendar, Repeat, Settings, Check, AlertCircle, Loader2, Upload, CheckSquare, Square, Save, Clock } from 'lucide-react';
 import { DEFAULT_FINANCE_CATEGORIES } from '../constants';
 import { Transaction, Client, Partner } from '../types';
 import { api } from '../services/api';
@@ -36,9 +36,9 @@ export const FinanceModule: React.FC = () => {
               api.getClients(),
               api.getPartners()
           ]);
-          setTransactions(t);
-          setClients(c);
-          setPartners(p);
+          setTransactions(t || []);
+          setClients(c || []);
+          setPartners(p || []);
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -104,6 +104,11 @@ export const FinanceModule: React.FC = () => {
     }
   };
 
+  const isFutureDate = (dateStr: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    return dateStr > today;
+  };
+
   if (isLoading) return <div className="flex h-full items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2 text-indigo-600"/> Carregando financeiro...</div>;
 
   return (
@@ -130,17 +135,29 @@ export const FinanceModule: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredTransactions.map(tr => {
                  const client = clients.find(c => c.id === tr.clientId);
+                 const future = isFutureDate(tr.date);
                  return (
                 <tr key={tr.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-6 py-4 text-sm text-slate-600 font-medium">{tr.date}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600 font-medium">
+                      <div className="flex items-center gap-2">
+                        {future && <Clock size={12} className="text-blue-500" />}
+                        {tr.date}
+                      </div>
+                  </td>
                   <td className="px-6 py-4 font-bold text-slate-800">{tr.description}</td>
                   <td className="px-6 py-4"><span className="text-xs font-bold bg-slate-100 px-2 py-1 rounded">{tr.category}</span></td>
                   <td className="px-6 py-4 text-sm text-slate-600">{client?.name || '-'}</td>
                   <td className={`px-6 py-4 text-sm font-bold ${tr.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>R$ {tr.amount.toLocaleString('pt-BR')}</td>
                   <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${tr.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {tr.status === 'paid' ? 'Pago' : 'Pendente'}
-                      </span>
+                      {future ? (
+                          <span className="px-2 py-1 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-700 border border-blue-200 flex items-center gap-1">
+                            <Clock size={10}/> Previsão
+                          </span>
+                      ) : (
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${tr.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {tr.status === 'paid' ? 'Pago' : 'Pendente'}
+                          </span>
+                      )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <button onClick={() => handleDeleteTransaction(tr.id)} className="text-slate-300 hover:text-rose-600 p-2 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14}/></button>
