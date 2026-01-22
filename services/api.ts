@@ -1,14 +1,72 @@
+
 import { supabase, isConfigured } from '../lib/supabaseClient';
 import { 
   Task, Client, Partner, Transaction, User, SLATier, ServiceCategory, 
-  CompanySettings, TaskStatus, TaskPriority, WorkConfig, PriorityWeight,
-  TaskTemplateGroup, Playbook, PlaybookBlock, CatalogItem, SubscriptionItem,
-  ClientStatus
+  TaskStatus, TaskPriority, WorkConfig
 } from '../types';
 import * as MOCK from '../constants';
 
 const N8N_PROD = "https://n8n.vps6935.panel.icontainer.net/webhook/3acf6ed2-6801-40c0-b8b1-cd59d82b16b5";
 const N8N_TEST = "https://n8n.vps6935.panel.icontainer.net/webhook-test/3acf6ed2-6801-40c0-b8b1-cd59d82b16b5";
+
+/**
+ * DATA ORCHESTRATOR (Simulando comportamento MCP)
+ * Garante que a tradução entre Frontend (camelCase) e Database (snake_case)
+ * seja atômica e livre de campos inválidos que travam o Schema Cache.
+ */
+const orchestrator = {
+    mapTaskToDb: (task: Partial<Task>) => {
+        const dbObj: any = {};
+        if (task.title !== undefined) dbObj.title = task.title;
+        if (task.description !== undefined) dbObj.description = task.description;
+        if (task.status !== undefined) dbObj.status = task.status;
+        if (task.priority !== undefined) dbObj.priority = task.priority;
+        if (task.clientId !== undefined) dbObj.client_id = task.clientId;
+        if (task.startDate !== undefined) dbObj.start_date = task.startDate;
+        if (task.dueDate !== undefined) dbObj.due_date = task.dueDate;
+        if (task.estimatedHours !== undefined) dbObj.estimated_hours = task.estimatedHours;
+        if (task.actualHours !== undefined) dbObj.actual_hours = task.actualHours;
+        if (task.assignees !== undefined) dbObj.assignees = task.assignees;
+        if (task.subtasks !== undefined) dbObj.subtasks = task.subtasks;
+        if (task.comments !== undefined) dbObj.comments = task.comments;
+        if (task.attachments !== undefined) dbObj.attachments = task.attachments;
+        if (task.category !== undefined) dbObj.category = task.category;
+        if (task.isTrackingTime !== undefined) dbObj.is_tracking_time = task.isTrackingTime;
+        if (task.lastTimeLogStart !== undefined) dbObj.last_time_log_start = task.lastTimeLogStart;
+        return dbObj;
+    },
+
+    mapClientToDb: (client: Partial<Client>) => {
+        const dbObj: any = {};
+        if (client.name !== undefined) dbObj.name = client.name;
+        if (client.status !== undefined) dbObj.status = client.status;
+        if (client.slaTierId !== undefined) dbObj.sla_tier_id = client.slaTierId;
+        if (client.partnerId !== undefined) dbObj.partner_id = client.partnerId;
+        if (client.onboardingDate !== undefined) dbObj.onboarding_date = client.onboardingDate;
+        if (client.description !== undefined) dbObj.description = client.description;
+        if (client.billingDay !== undefined) dbObj.billing_day = client.billingDay;
+        if (client.healthScore !== undefined) dbObj.health_score = client.healthScore;
+        if (client.hoursUsedMonth !== undefined) dbObj.hours_used_month = client.hoursUsedMonth;
+        if (client.hasImplementation !== undefined) dbObj.has_implementation = client.hasImplementation;
+        if (client.customFields !== undefined) dbObj.custom_fields = client.customFields;
+        return dbObj;
+    },
+
+    mapTransactionToDb: (t: Partial<Transaction>) => {
+        return {
+            date: t.date,
+            description: t.description,
+            category: t.category,
+            amount: t.amount,
+            type: t.type,
+            status: t.status,
+            client_id: t.clientId,
+            partner_id: t.partnerId,
+            frequency: t.frequency,
+            installments: t.installments
+        };
+    }
+};
 
 export const api = {
     initializeDatabase: async () => { if (isConfigured) console.log("🛡️ Tuesday Connected"); },
@@ -115,7 +173,7 @@ export const api = {
         await supabase.from('sla_tiers').delete().eq('id', id);
     },
 
-    // --- TASKS ---
+    // --- TASKS (Orchestrated) ---
     getTasks: async (): Promise<Task[]> => {
         if (!isConfigured) return MOCK.MOCK_TASKS;
         const { data } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
@@ -137,53 +195,30 @@ export const api = {
 
     createTask: async (task: Partial<Task>): Promise<Task> => {
         if (!isConfigured) return { ...task, id: Math.random().toString(), createdAt: new Date().toISOString() } as any;
-        const { data, error } = await supabase.from('tasks').insert([{
-            title: task.title,
-            description: task.description || '',
-            client_id: task.clientId,
-            status: task.status || TaskStatus.BACKLOG,
-            priority: task.priority || TaskPriority.MEDIUM,
-            start_date: task.startDate,
-            due_date: task.dueDate,
-            estimated_hours: task.estimatedHours || 0,
-            actual_hours: task.actualHours || 0,
-            category: task.category || 'Geral',
-            assignees: task.assignees || [],
-            subtasks: task.subtasks || [],
-            comments: task.comments || [],
-            attachments: task.attachments || []
-        }]).select().single();
+        const dbPayload = orchestrator.mapTaskToDb(task);
+        const { data, error } = await supabase.from('tasks').insert([dbPayload]).select().single();
         if (error) throw error;
         return data;
     },
 
     updateTask: async (task: Task): Promise<Task> => {
         if (!isConfigured) return task;
-        const { data, error } = await supabase.from('tasks').update({
-            title: task.title,
-            status: task.status,
-            priority: task.priority,
-            description: task.description,
-            client_id: task.clientId,
-            start_date: task.startDate,
-            due_date: task.dueDate,
-            estimated_hours: task.estimatedHours,
-            actual_hours: task.actualHours,
-            assignees: task.assignees,
-            subtasks: task.subtasks,
-            comments: task.comments,
-            attachments: task.attachments,
-            category: task.category,
-            is_tracking_time: task.isTrackingTime,
-            last_time_log_start: task.lastTimeLogStart
-        }).eq('id', task.id).select().single();
-        if (error) throw error;
+        const dbPayload = orchestrator.mapTaskToDb(task);
+        // Remove campos imutáveis que podem gerar erro no cache do Supabase
+        delete dbPayload.id;
+        delete dbPayload.created_at;
+        
+        const { data, error } = await supabase.from('tasks').update(dbPayload).eq('id', task.id).select().single();
+        if (error) {
+            console.error("Supabase Save Error:", error);
+            throw error;
+        }
         return data;
     },
 
     deleteTask: async (id: string) => await supabase.from('tasks').delete().eq('id', id),
 
-    // --- CLIENTS ---
+    // --- CLIENTS (Orchestrated) ---
     getClients: async () => {
         if (!isConfigured) return MOCK.MOCK_CLIENTS;
         const { data } = await supabase.from('clients').select('*').order('name');
@@ -202,21 +237,17 @@ export const api = {
 
     updateClient: async (client: Client) => {
         if (!isConfigured) return client;
-        // Mapeamento explícito para snake_case - Corrigindo erro billing_day
-        const { data, error } = await supabase.from('clients').update({
-            name: client.name,
-            status: client.status,
-            sla_tier_id: client.slaTierId,
-            partner_id: client.partnerId,
-            onboarding_date: client.onboardingDate,
-            description: client.description,
-            billing_day: client.billingDay || 1,
-            health_score: client.healthScore,
-            hours_used_month: client.hoursUsedMonth,
-            has_implementation: client.hasImplementation,
-            custom_fields: client.customFields
-        }).eq('id', client.id).select().single();
-        if (error) throw error;
+        const dbPayload = orchestrator.mapClientToDb(client);
+        
+        const { data, error } = await supabase.from('clients')
+            .update(dbPayload)
+            .eq('id', client.id)
+            .select().single();
+            
+        if (error) {
+            console.error("Supabase Client Update Error:", error);
+            throw error;
+        }
         return data;
     },
 
@@ -224,7 +255,7 @@ export const api = {
         if(isConfigured) await supabase.from('clients').delete().in('id', ids); 
     },
 
-    // --- FINANCE ---
+    // --- FINANCE (Orchestrated) ---
     getTransactions: async () => {
         if (!isConfigured) return MOCK.MOCK_TRANSACTIONS;
         const { data } = await supabase.from('transactions').select('*').order('date', { ascending: false });
@@ -237,18 +268,8 @@ export const api = {
 
     createTransaction: async (t: Partial<Transaction>) => {
         if (!isConfigured) return t as Transaction;
-        const { data, error } = await supabase.from('transactions').insert([{
-            date: t.date,
-            description: t.description,
-            category: t.category,
-            amount: t.amount,
-            type: t.type,
-            status: t.status,
-            client_id: t.clientId,
-            partner_id: t.partnerId,
-            frequency: t.frequency || 'single',
-            installments: t.installments || 1
-        }]).select().single();
+        const dbPayload = orchestrator.mapTransactionToDb(t);
+        const { data, error } = await supabase.from('transactions').insert([dbPayload]).select().single();
         if (error) throw error;
         return data;
     },
